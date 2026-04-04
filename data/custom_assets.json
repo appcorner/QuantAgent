@@ -1,4 +1,22 @@
 [
-  "GOLD",
-  "GC=F"
+  {
+    "symbol": "BTCUSD",
+    "source": "mt5"
+  },
+  {
+    "symbol": "BTC_THB",
+    "source": "bitkub"
+  },
+  {
+    "symbol": "BTCUSDT",
+    "source": "binance"
+  },
+  {
+    "symbol": "DOGEUSDT",
+    "source": "binance"
+  },
+  {
+    "symbol": "BTC",
+    "source": "yfinance"
+  }
 ]

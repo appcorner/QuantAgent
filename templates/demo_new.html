@@ -861,7 +861,63 @@
                  font-size: 1.2rem;
              }
          }
-    </style>
+    
+         /* Source Selector Styles */
+         .source-selector {
+             display: flex;
+             gap: 0.5rem;
+             margin-bottom: 1.5rem;
+             overflow-x: auto;
+             padding-bottom: 0.5rem;
+         }
+         .source-btn {
+             flex: 1;
+             min-width: 100px;
+             background: var(--gray-100);
+             border: 2px solid var(--gray-200);
+             border-radius: 12px;
+             padding: 0.75rem 1rem;
+             font-weight: 600;
+             color: var(--gray-700);
+             cursor: pointer;
+             transition: all 0.3s;
+             display: flex;
+             flex-direction: column;
+             align-items: center;
+             gap: 0.25rem;
+         }
+         .source-btn:hover {
+             border-color: var(--etrade-purple-light);
+             background: var(--gray-200);
+         }
+         .source-btn.active {
+             background: var(--etrade-purple-light);
+             color: var(--white);
+             border-color: var(--etrade-purple-light);
+             box-shadow: 0 4px 12px rgba(86, 39, 216, 0.3);
+         }
+         
+         .delete-asset-btn {
+             position: absolute;
+             top: -8px;
+             right: -8px;
+             background: #EF4444;
+             color: white;
+             border-radius: 50%;
+             width: 24px;
+             height: 24px;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             font-size: 0.8rem;
+             cursor: pointer;
+             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+             opacity: 0;
+             transition: opacity 0.2s;
+         }
+         .asset-btn { position: relative; }
+         .asset-btn:hover .delete-asset-btn { opacity: 1; }
+</style>
 </head>
 
 <body>
@@ -934,86 +990,69 @@
                             <i class="fas fa-cog" style="font-size: 1.5rem; color: var(--etrade-purple-light);"></i> Analysis Configuration
                         </h3>
                         
-                        <!-- Panel 1: Data Selection -->
+                                                <!-- Panel 1: Data Selection -->
                         <div class="panel-group">
                             <div class="panel">
                                 <h4 class="panel-title">
                                     <i class="fas fa-database"></i> Data Selection
                                 </h4>
+
+                                <!-- Data Source Selection -->
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <i class="fas fa-server"></i> Data Source
+                                    </label>
+                                    <div class="source-selector" id="sourceSelector">
+                                        <button type="button" class="source-btn active" data-source="yfinance" onclick="selectDataSource(this, 'yfinance')">
+                                            <i class="fas fa-chart-bar"></i> YFinance
+                                        </button>
+                                        <button type="button" class="source-btn" data-source="mt5" onclick="selectDataSource(this, 'mt5')">
+                                            <i class="fas fa-exchange-alt"></i> MT5
+                                        </button>
+                                        <button type="button" class="source-btn" data-source="bitkub" onclick="selectDataSource(this, 'bitkub')">
+                                            <i class="fas fa-coins"></i> Bitkub
+                                        </button>
+                                        <button type="button" class="source-btn" data-source="binance" onclick="selectDataSource(this, 'binance')">
+                                            <i class="fab fa-bitcoin"></i> Binance
+                                        </button>
+                                    </div>
+                                </div>
                                 
                                 <!-- Asset Selection -->
                                 <div class="form-group">
                                     <label class="form-label">
-                                        <i class="fas fa-coins"></i> Asset
+                                        <i class="fas fa-wallet"></i> Saved Assets
                                     </label>
                                     <div class="asset-button-grid" id="assetButtonGrid">
-                                        <button type="button" class="asset-btn" data-asset="BTC" onclick="selectAsset(this, 'BTC')">
-                                            <i class="fas fa-bitcoin"></i> BTC
-                                        </button>
-                                        <button type="button" class="asset-btn" data-asset="ETH" onclick="selectAsset(this, 'ETH')">
-                                            <i class="fab fa-ethereum"></i> ETH
-                                        </button>
-                                        <button type="button" class="asset-btn" data-asset="AAPL" onclick="selectAsset(this, 'AAPL')">
-                                            <i class="fas fa-apple-alt"></i> AAPL
-                                        </button>
-                                        <button type="button" class="asset-btn" data-asset="GOOGL" onclick="selectAsset(this, 'GOOGL')">
-                                            <i class="fab fa-google"></i> GOOGL
-                                        </button>
-                                        <button type="button" class="asset-btn" data-asset="MSFT" onclick="selectAsset(this, 'MSFT')">
-                                            <i class="fab fa-microsoft"></i> MSFT
-                                        </button>
-                                        <button type="button" class="asset-btn" data-asset="TSLA" onclick="selectAsset(this, 'TSLA')">
-                                            <i class="fas fa-car"></i> TSLA
-                                        </button>
-                                        <button type="button" class="asset-btn custom-asset-btn" id="customAssetBtn" onclick="showCustomAssetInput()">
-                                            <i class="fas fa-plus"></i> Custom
-                                        </button>
+                                        <!-- Dynamically populated from custom_assets.json -->
                                     </div>
                                     
-                                    <!-- Custom Asset Input -->
-                                    <div id="customAssetDiv" class="mt-3" style="display: none;">
-                                        <div class="alert alert-info">
-                                            <h6><i class="fas fa-plus-circle"></i> Custom Asset Symbol</h6>
-                                            <p class="mb-2"><strong>💡 Examples:</strong> NQ (Nasdaq-100 Futures), ZN (10-Year Treasury), etc.</p>
-                                            <p class="mb-0"><strong>📝 Format:</strong> Enter the Yahoo Finance symbol for your asset</p>
-                                        </div>
+                                    <div class="mt-3">
                                         <div class="input-group">
-                                            <input type="text" class="form-control" id="customAssetInput" placeholder="Enter symbol (e.g., NQ=F, ZN=F, ^VIX)">
+                                            <input type="text" class="form-control" id="customAssetInput" placeholder="Enter symbol (e.g. BTC-USD, XAUUSD)" style="text-transform: uppercase;">
                                             <button class="btn btn-outline-primary" type="button" onclick="confirmCustomAsset()">
-                                                <i class="fas fa-check"></i> Confirm
+                                                <i class="fas fa-plus"></i> Add
                                             </button>
                                         </div>
-                                        <small class="form-text text-muted">Use Yahoo Finance symbols. For futures, add =F suffix (e.g., NQ=F)</small>
+                                        <small class="form-text text-muted" id="assetHintText">Use Yahoo Finance symbols. For futures, add =F suffix (e.g., NQ=F)</small>
                                     </div>
                                 </div>
                                 
                                 <!-- Timeframe Selection -->
-                                <div class="form-group">
+                                <div class="form-group mt-4">
                                     <label class="form-label">
                                         <i class="fas fa-chart-line"></i> Timeframe
                                     </label>
-                                    <div class="timeframe-selector">
-                                        <button type="button" class="timeframe-btn" data-timeframe="1m" onclick="selectTimeframe(this, '1m')">
-                                            1m
-                                        </button>
-                                        <button type="button" class="timeframe-btn" data-timeframe="15m" onclick="selectTimeframe(this, '15m')">
-                                            15m
-                                        </button>
-                                        <button type="button" class="timeframe-btn" data-timeframe="1h" onclick="selectTimeframe(this, '1h')">
-                                            1h
-                                        </button>
-                                        <button type="button" class="timeframe-btn" data-timeframe="4h" onclick="selectTimeframe(this, '4h')">
-                                            4h
-                                        </button>
-                                        <button type="button" class="timeframe-btn" data-timeframe="1d" onclick="selectTimeframe(this, '1d')">
-                                            1d
-                                        </button>
-                                        <button type="button" class="timeframe-btn" data-timeframe="1w" onclick="selectTimeframe(this, '1w')">
-                                            1w
-                                        </button>
-                                        <button type="button" class="timeframe-btn" data-timeframe="1mo" onclick="selectTimeframe(this, '1mo')">
-                                            1mo
-                                        </button>
+                                    <div class="input-group">
+                                        <select id="timeframeSelect" class="form-select" style="max-width: 120px;" onchange="syncTimeframeInput(this.value)">
+                                            <option value="1m">1m</option>
+                                            <option value="5m">5m</option>
+                                            <option value="15m">15m</option>
+                                            <option value="1h" selected>1h</option>
+                                            <option value="4h">4h</option>
+                                            <option value="1d">1d</option>
+                                        </select>
+                                        <input type="text" class="form-control" id="customTimeframeInput" placeholder="Or type custom (e.g. 12h)" value="1h">
                                     </div>
                                 </div>
                             </div>
@@ -1024,60 +1063,59 @@
                                     <i class="fas fa-calendar-alt"></i> Date & Time Configuration
                                 </h4>
                                 
-                                <!-- Date Range -->
-                                <div class="form-group">
-                                    <label class="form-label" style="font-size: 1.2rem; font-weight: 600; color: #374151; margin-bottom: 0.75rem;">
-                                        <i class="fas fa-calendar-week" style="color: #6B7280; margin-right: 0.5rem;"></i> Date Range
-                                    </label>
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <input type="date" id="startDate" class="form-control" placeholder="mm/dd/yyyy" required style="font-size: 1.1rem; padding: 0.875rem 1rem; border: 2px solid #E5E7EB; border-radius: 8px;">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <input type="date" id="endDate" class="form-control" placeholder="mm/dd/yyyy" required style="font-size: 1.1rem; padding: 0.875rem 1rem; border: 2px solid #E5E7EB; border-radius: 8px;">
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Time Selector -->
-                                <div class="form-group">
-                                    <label class="form-label" style="font-size: 1.2rem; font-weight: 600; color: #374151; margin-bottom: 0.75rem;">
-                                        <i class="fas fa-clock" style="color: #6B7280; margin-right: 0.5rem;"></i> Time Selector
-                                    </label>
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <input type="time" id="startTime" class="form-control" value="00:00" step="60" style="font-size: 1.1rem; padding: 0.875rem 1rem; border: 2px solid #E5E7EB; border-radius: 8px;">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <input type="time" id="endTime" class="form-control" value="23:59" step="60" style="font-size: 1.1rem; padding: 0.875rem 1rem; border: 2px solid #E5E7EB; border-radius: 8px;">
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Current Time Option -->
-                                <div class="form-group">
-                                    <div class="form-check" style="margin-top: 1rem;">
-                                        <input class="form-check-input" type="checkbox" id="useCurrentTime" checked style="transform: scale(1.2); margin-right: 0.75rem;">
-                                        <label class="form-check-label" for="useCurrentTime" style="font-size: 1.3rem; font-weight: 500; color: #374151; cursor: pointer;">
-                                            Use current date & time for end
+                                <div class="form-group mb-4">
+                                    <div class="form-check" style="background: var(--gray-100); padding: 1rem; border-radius: 12px; border: 1px solid var(--gray-200);">
+                                        <input class="form-check-input" type="checkbox" id="useCurrentTime" checked onchange="toggleDateInputs()" style="width: 1.5rem; height: 1.5rem; margin-top: 0; margin-left: 0;">
+                                        <label class="form-check-label fw-bold" for="useCurrentTime" style="margin-left: 0.75rem; font-size: 1.1rem; color: var(--etrade-purple);">
+                                            Use Current Time (Fetch latest bars)
                                         </label>
                                     </div>
                                 </div>
                                 
-                                <!-- Validation Messages -->
-                                <div id="dateRangeInfo" class="alert alert-info mt-2" style="display: none;">
-                                    <i class="fas fa-info-circle"></i>
-                                    <span id="dateRangeText"></span>
+                                <!-- Bar Count Input (Visible when useCurrentTime is checked) -->
+                                <div class="form-group" id="barsCountGroup">
+                                    <label class="form-label">
+                                        <i class="fas fa-bars"></i> Number of Bars to Fetch
+                                    </label>
+                                    <input type="number" id="barsCount" class="form-control" value="100" min="10" max="5000">
                                 </div>
-                                
-                                <div id="dateRangeError" class="alert alert-danger mt-2" style="display: none;">
-                                    <i class="fas fa-exclamation-triangle"></i>
-                                    <span id="dateRangeErrorText"></span>
+
+                                <!-- Date Range (Visible when useCurrentTime is unchecked) -->
+                                <div id="dateRangeGroup" style="display: none;">
+                                    <div class="form-group">
+                                        <label class="form-label" style="font-size: 1.1rem; font-weight: 600; color: #374151; margin-bottom: 0.75rem;">
+                                            <i class="fas fa-calendar-week" style="color: #6B7280; margin-right: 0.5rem;"></i> Date Range
+                                        </label>
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="startDate">Start Date:</label>
+                                                <input type="date" id="startDate" class="form-control" placeholder="mm/dd/yyyy">
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label for="endDate">End Date:</label>
+                                                <input type="date" id="endDate" class="form-control" placeholder="mm/dd/yyyy">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" style="font-size: 1.1rem; font-weight: 600; color: #374151; margin-bottom: 0.75rem;">
+                                            <i class="fas fa-clock" style="color: #6B7280; margin-right: 0.5rem;"></i> Time Range (Local Time)
+                                        </label>
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="startTime">Start Time:</label>
+                                                <input type="time" id="startTime" class="form-control" value="00:00">
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label for="endTime">End Time:</label>
+                                                <input type="time" id="endTime" class="form-control" value="23:59">
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- Panel 3: Settings & Security -->
+                            <!-- Panel 3: Settings & Security -->
                         <div class="panel-group">
                             <div class="panel">
                                 <h4 class="panel-title">
@@ -1191,471 +1229,244 @@
     </div>
 
     <script>
-        // Global variables
-        let currentAsset = '';
-        let currentTimeframe = '';
-        
-        // Persisted state keys
-        const STORAGE_KEYS = {
-            CUSTOM_ASSETS: 'quantagent_custom_assets',
-            SELECTED_ASSET: 'quantagent_selected_asset',
-            SELECTED_TIMEFRAME: 'quantagent_selected_timeframe'
-        };
+        const STORAGE_KEYS = { SELECTED_ASSET: 'quantagent_selected_asset' };
+        let selectedSource = 'yfinance';
+        let selectedAsset = '';
 
-        // Add or render a custom asset button into the grid
-        function addCustomAssetButton(symbol, isServerLoaded = false) {
-            const grid = document.getElementById('assetButtonGrid');
-            if (!grid) return;
-
-            // Prevent duplicates (check existing data-asset values)
-            const existing = Array.from(grid.querySelectorAll('.asset-btn')).some(btn => btn.dataset.asset === symbol);
-            if (existing) return;
-
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'asset-btn';
-            btn.dataset.asset = symbol;
-            btn.innerHTML = `<i class="fas fa-tag"></i> ${symbol}`;
-            btn.addEventListener('click', () => selectAsset(btn, symbol));
-
-            // Insert before the "Custom" button if present
-            const customBtn = document.getElementById('customAssetBtn');
-            if (customBtn && customBtn.parentNode === grid) {
-                grid.insertBefore(btn, customBtn);
-            } else {
-                grid.appendChild(btn);
+        document.addEventListener('DOMContentLoaded', function() {
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            if(document.getElementById('startDate')) document.getElementById('startDate').value = today.toISOString().split('T')[0];
+            if(document.getElementById('endDate')) document.getElementById('endDate').value = tomorrow.toISOString().split('T')[0];
+            
+            toggleDateInputs();
+            loadPersistentAssets();
+            if(typeof checkApiKeyStatus === 'function') checkApiKeyStatus();
+            
+            // Allow submitting custom asset on Enter
+            const customInput = document.getElementById('customAssetInput');
+            if (customInput) {
+                customInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        confirmCustomAsset();
+                    }
+                });
             }
+        });
 
-            // If loaded from server or localStorage, do not auto-select unless it matches stored selection
-            const storedSelected = localStorage.getItem(STORAGE_KEYS.SELECTED_ASSET);
-            if (storedSelected === symbol) {
-                // mimic click to set active and store
-                btn.click();
+        function toggleDateInputs() {
+            const isChecked = document.getElementById('useCurrentTime').checked;
+            const dateGroup = document.getElementById('dateRangeGroup');
+            const barsGroup = document.getElementById('barsCountGroup');
+            if (dateGroup) dateGroup.style.display = isChecked ? 'none' : 'block';
+            if (barsGroup) barsGroup.style.display = isChecked ? 'block' : 'none';
+            
+            // Set current time for fallback
+            if (isChecked) {
+                const now = new Date();
+                const currentDate = now.toISOString().split('T')[0];
+                const currentTime = now.toTimeString().slice(0, 5);
+                const endDateInput = document.getElementById('endDate');
+                const endTimeInput = document.getElementById('endTime');
+                if (endDateInput) endDateInput.value = currentDate;
+                if (endTimeInput) endTimeInput.value = currentTime;
             }
         }
 
-        // Load custom assets from localStorage and server, render them
-        function loadCustomAssets() {
-            // Load from localStorage first (fast)
-            try {
-                const local = localStorage.getItem(STORAGE_KEYS.CUSTOM_ASSETS);
-                if (local) {
-                    const list = JSON.parse(local);
-                    list.forEach(sym => addCustomAssetButton(sym, false));
-                }
-            } catch (e) {
-                console.warn('Failed to parse local custom assets', e);
-            }
+        function syncTimeframeInput(val) {
+            const input = document.getElementById('customTimeframeInput');
+            if (input) input.value = val;
+        }
 
-            // Then attempt to load server-persisted custom assets and merge
+        function selectDataSource(btn, source) {
+            document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+            if(btn) btn.classList.add('active');
+            selectedSource = source;
+            
+            const hints = {
+                'yfinance': 'Use Yahoo Finance symbols. (e.g. AAPL, BTC-USD, NQ=F)',
+                'mt5': 'Use MT5 symbols. (e.g. EURUSD, XAUUSD)',
+                'bitkub': 'Use Bitkub symbols. (e.g. BTC_THB, ETH_THB)',
+                'binance': 'Use Binance symbols. (e.g. BTCUSDT, SOLUSDT)'
+            };
+            const hintEl = document.getElementById('assetHintText');
+            if(hintEl) hintEl.innerText = hints[source] || '';
+            
+            loadPersistentAssets();
+        }
+
+        function selectAsset(btn, asset) {
+            document.querySelectorAll('.asset-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+            selectedAsset = asset;
+            localStorage.setItem(STORAGE_KEYS.SELECTED_ASSET, asset);
+        }
+
+        function createAssetButton(symbol, source) {
+            const btn = document.createElement('div');
+            btn.className = 'asset-btn';
+            btn.dataset.asset = symbol;
+            btn.dataset.source = source;
+            btn.onclick = () => selectAsset(btn, symbol);
+            
+            let icon = 'fas fa-chart-bar';
+            if (source === 'mt5') icon = 'fas fa-exchange-alt';
+            else if (source === 'bitkub') icon = 'fas fa-coins';
+            else if (source === 'binance') icon = 'fab fa-bitcoin';
+            
+            btn.innerHTML = `<i class="${icon}"></i> <span>${symbol}</span>
+                             <div class="delete-asset-btn" onclick="deleteCustomAsset(event, '${symbol}', '${source}')">
+                                 <i class="fas fa-times"></i>
+                             </div>`;
+            return btn;
+        }
+
+        function addCustomAssetButton(symbol, source) {
+            const grid = document.getElementById('assetButtonGrid');
+            if (!grid) return;
+            const existing = Array.from(grid.querySelectorAll('.asset-btn')).some(b => b.dataset.asset === symbol && b.dataset.source === source);
+            if (existing) return;
+            grid.appendChild(createAssetButton(symbol, source));
+        }
+
+        function loadPersistentAssets() {
             fetch('/api/custom-assets')
                 .then(r => r.json())
                 .then(data => {
-                    if (Array.isArray(data.custom_assets)) {
-                        data.custom_assets.forEach(sym => addCustomAssetButton(sym, true));
-                        // Sync server list into localStorage (merge, dedupe)
-                        try {
-                            const local = JSON.parse(localStorage.getItem(STORAGE_KEYS.CUSTOM_ASSETS) || '[]');
-                            const merged = Array.from(new Set([...(local || []), ...data.custom_assets]));
-                            localStorage.setItem(STORAGE_KEYS.CUSTOM_ASSETS, JSON.stringify(merged));
-                        } catch (e) {
-                            console.warn('Failed to sync custom assets to localStorage', e);
-                        }
+                    const grid = document.getElementById('assetButtonGrid');
+                    if (!grid) return;
+                    grid.innerHTML = '';
+                    
+                    let firstAsset = null;
+                    const storedSelected = localStorage.getItem(STORAGE_KEYS.SELECTED_ASSET);
+                    let toSelect = null;
+                    
+                    if (data.custom_assets && Array.isArray(data.custom_assets)) {
+                        data.custom_assets.forEach(item => {
+                            let sym = item; let src = 'yfinance';
+                            if (typeof item === 'object') {
+                                sym = item.symbol; src = item.source || 'yfinance';
+                            }
+                            if (src === selectedSource) {
+                                addCustomAssetButton(sym, src);
+                                if (!firstAsset) firstAsset = {sym, btn: grid.lastChild};
+                                if (sym === storedSelected) toSelect = {sym, btn: grid.lastChild};
+                            }
+                        });
+                    }
+                    
+                    if (toSelect) {
+                        selectAsset(toSelect.btn, toSelect.sym);
+                    } else if (firstAsset) {
+                        selectAsset(firstAsset.btn, firstAsset.sym);
+                    } else {
+                        selectedAsset = '';
                     }
                 })
-                .catch(err => {
-                    // Not fatal - server might not be reachable
-                    console.warn('Could not fetch server custom assets', err);
-                });
+                .catch(e => console.warn('Could not fetch custom assets', e));
         }
 
-        // Override confirmCustomAsset to create a persistent custom asset and persist to server/localStorage
         function confirmCustomAsset() {
-            const customAssetEl = document.getElementById('customAssetInput');
-            const customAsset = customAssetEl.value.trim();
-
-            if (!customAsset) {
-                alert('Please enter a custom asset symbol.');
+            const input = document.getElementById('customAssetInput');
+            if (!input) return;
+            let symbol = input.value.trim().toUpperCase();
+            
+            if (!symbol) {
+                alert('Please enter an asset symbol.');
                 return;
             }
-
-            // Normalize (trim)
-            const symbol = customAsset;
-
-            // Save to localStorage list
-            try {
-                const listRaw = localStorage.getItem(STORAGE_KEYS.CUSTOM_ASSETS);
-                const list = listRaw ? JSON.parse(listRaw) : [];
-                if (!list.includes(symbol)) {
-                    list.push(symbol);
-                    localStorage.setItem(STORAGE_KEYS.CUSTOM_ASSETS, JSON.stringify(list));
-                }
-            } catch (e) {
-                console.warn('Could not persist custom asset to localStorage', e);
-            }
-
-            // Persist to server (best-effort)
+            
             fetch('/api/save-custom-asset', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol })
-            }).then(r => r.json())
-              .then(resp => {
-                  if (!resp.success) {
-                      console.warn('Server did not save custom asset', resp);
-                  }
-              }).catch(err => {
-                  console.warn('Error saving custom asset to server', err);
-              });
-
-            // Add button and select it
-            addCustomAssetButton(symbol);
-            // Select the new asset: find button and click
-            const grid = document.getElementById('assetButtonGrid');
-            const newBtn = Array.from(grid.querySelectorAll('.asset-btn')).find(b => b.dataset.asset === symbol);
-            if (newBtn) {
-                newBtn.click();
-            }
-
-            // Hide custom asset input
-            document.getElementById('customAssetDiv').style.display = 'none';
-
-            // Clear input
-            customAssetEl.value = '';
-
-            // Notify user
-            // Use a non-blocking notification (replace alert with console + subtle DOM message if desired)
-            console.log(`Custom asset "${symbol}" selected and persisted`);
-        }
-
-        // Updated selectAsset to persist selection to localStorage
-        function selectAsset(button, asset) {
-            // Remove active class from all asset buttons
-            document.querySelectorAll('.asset-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-
-            // Add active class to clicked button
-            button.classList.add('active');
-
-            // Store selected asset
-            selectedAsset = asset;
-            try {
-                localStorage.setItem(STORAGE_KEYS.SELECTED_ASSET, asset);
-            } catch (e) {
-                console.warn('Could not persist selected asset', e);
-            }
-
-            // Hide custom asset input if it was showing
-            const cav = document.getElementById('customAssetDiv');
-            if (cav) cav.style.display = 'none';
-
-            console.log('Selected asset:', asset);
-        }
-
-        // Persist timeframe selection as well
-        function selectTimeframe(button, timeframe) {
-            // Remove active class from all timeframe buttons
-            document.querySelectorAll('.timeframe-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-
-            // Add active class to clicked button
-            button.classList.add('active');
-
-            // Store selected timeframe
-            selectedTimeframe = timeframe;
-            try {
-                localStorage.setItem(STORAGE_KEYS.SELECTED_TIMEFRAME, timeframe);
-            } catch (e) {
-                console.warn('Could not persist selected timeframe', e);
-            }
-
-            console.log('Selected timeframe:', timeframe);
-        }
-
-        // On page load, restore selected asset/timeframe and custom assets
-        document.addEventListener('DOMContentLoaded', function() {
-            // Set default dates
-            const now = new Date();
-            const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-            
-            // Format dates for input fields
-            const formatDate = (date) => {
-                return date.toISOString().split('T')[0];
-            };
-            
-            // Set default start date (30 days ago)
-            document.getElementById('startDate').value = formatDate(thirtyDaysAgo);
-            
-            // Set default end date (today)
-            document.getElementById('endDate').value = formatDate(now);
-            
-            // Apply the current-time checkbox behavior immediately on load
-            // (this will disable & populate end date/time if the checkbox is checked by default)
-            try { handleUseCurrentTimeChange(); } catch (e) { console.warn('handleUseCurrentTimeChange not available yet', e); }
-            
-            // Load custom assets and server-synced assets
-            loadCustomAssets();
-
-            // Restore selected timeframe (if saved)
-            try {
-                const savedTF = localStorage.getItem(STORAGE_KEYS.SELECTED_TIMEFRAME);
-                if (savedTF) {
-                    const tfBtn = Array.from(document.querySelectorAll('.timeframe-btn')).find(b => b.dataset.timeframe === savedTF);
-                    if (tfBtn) {
-                        tfBtn.classList.add('active');
-                        selectedTimeframe = savedTF;
-                    }
-                }
-            } catch (e) {
-                console.warn('Could not restore timeframe from localStorage', e);
-            }
-
-            // Restore selected asset (if saved). If it is a custom asset that hasn't been added yet,
-            // add it and then select it (addCustomAssetButton handles checking duplicates).
-            try {
-                const savedAsset = localStorage.getItem(STORAGE_KEYS.SELECTED_ASSET);
-                if (savedAsset) {
-                    // Try to find an existing button
-                    let btn = Array.from(document.querySelectorAll('.asset-btn')).find(b => b.dataset.asset === savedAsset);
-                    if (!btn) {
-                        // Add it as custom and then select
-                        addCustomAssetButton(savedAsset, false);
-                        btn = Array.from(document.querySelectorAll('.asset-btn')).find(b => b.dataset.asset === savedAsset);
-                    }
-                    if (btn) {
-                        btn.classList.add('active');
-                        selectedAsset = savedAsset;
-                    }
+                body: JSON.stringify({ symbol: symbol, source: selectedSource })
+            })
+            .then(r => r.json())
+            .then(resp => {
+                if(resp.success) {
+                    input.value = '';
+                    loadPersistentAssets();
+                    // Select after slight delay to allow rendering
+                    setTimeout(() => {
+                        const grid = document.getElementById('assetButtonGrid');
+                        if (!grid) return;
+                        const newBtn = Array.from(grid.querySelectorAll('.asset-btn')).find(b => b.dataset.asset === resp.symbol);
+                        if (newBtn) selectAsset(newBtn, resp.symbol);
+                    }, 200);
                 } else {
-                    // fallback defaults from original code
-                    const defaultTimeframeBtn = document.querySelector('[data-timeframe="1h"]');
-                    if (defaultTimeframeBtn && !selectedTimeframe) {
-                        defaultTimeframeBtn.classList.add('active');
-                        selectedTimeframe = '1h';
-                    }
-                    const defaultAssetBtn = document.querySelector('[data-asset="BTC"]');
-                    if (defaultAssetBtn && !selectedAsset) {
-                        defaultAssetBtn.classList.add('active');
-                        selectedAsset = 'BTC';
-                    }
+                    alert('Error saving asset: ' + resp.error);
                 }
-            } catch (e) {
-                console.warn('Could not restore selected asset from localStorage', e);
-            }
-
-            document.getElementById('useCurrentTime').addEventListener('change', handleUseCurrentTimeChange);
-            
-            // Set up date/time validation
-            const dateInputs = ['startDate', 'startTime', 'endDate', 'endTime'];
-            dateInputs.forEach(id => {
-                document.getElementById(id).addEventListener('change', validateDateRange);
-            });
-            
-            // Initialize current time update
-            setInterval(updateCurrentTime, 1000);
-            
-            // Add keyboard navigation for timeframe selector
-            document.addEventListener('keydown', function(e) {
-                const activeBtn = document.querySelector('.timeframe-btn.active');
-                if (!activeBtn) return;
-                
-                const buttons = Array.from(document.querySelectorAll('.timeframe-btn'));
-                const currentIndex = buttons.indexOf(activeBtn);
-                
-                if (e.key === 'ArrowLeft' && currentIndex > 0) {
-                    buttons[currentIndex - 1].click();
-                } else if (e.key === 'ArrowRight' && currentIndex < buttons.length - 1) {
-                    buttons[currentIndex + 1].click();
-                }
-            });
-            
-            // Check API key status on page load
-            checkApiKeyStatus();
-            
-            // Set initial provider dropdown state
-            const savedProvider = localStorage.getItem('quantagent_provider') || 'openai';
-            if (savedProvider) {
-                document.getElementById('llmProviderSelect').value = savedProvider;
-                handleProviderChange();
-            }
-        });
-        
-        function checkApiKeyStatus() {
-            const provider = document.getElementById('llmProviderSelect')?.value || 'openai';
-            fetch(`/api/get-api-key-status?provider=${provider}`)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    const providerNames = {
-                        'openai': 'OpenAI',
-                        'anthropic': 'Anthropic',
-                        'qwen': 'Qwen'
-                    };
-                    const providerName = providerNames[provider] || provider;
-                    
-                    if (data.error) {
-                        console.error('API key status error:', data.error);
-                        // Don't show error if it's just that no key is set
-                        if (data.has_key === false) {
-                            showApiKeyError(`No ${providerName} API key found. Please enter your ${providerName} API key.`);
-                        } else {
-                            showApiKeyError(`Error checking API key: ${data.error}`);
-                        }
-                    } else if (data.has_key) {
-                        showApiKeyStatus(`${providerName} API key is set: ${data.masked_key}`);
-                    } else {
-                        showApiKeyError(`No ${providerName} API key found. Please enter your ${providerName} API key.`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error checking API key status:', error);
-                    // Silently fail - don't show error to user
-                });
+            })
+            .catch(err => alert('Error saving custom asset: ' + err));
         }
         
-                 // Global variables
-         let selectedAsset = '';
-         let selectedTimeframe = '1h'; // Default timeframe
-         
-         function selectAsset(button, asset) {
-             // Remove active class from all asset buttons
-             document.querySelectorAll('.asset-btn').forEach(btn => {
-                 btn.classList.remove('active');
-             });
-             
-             // Add active class to clicked button
-             button.classList.add('active');
-             
-             // Store selected asset
-             selectedAsset = asset;
-             try {
-                 localStorage.setItem(STORAGE_KEYS.SELECTED_ASSET, asset);
-             } catch (e) {
-                 console.warn('Could not persist selected asset', e);
-             }
-
-             // Hide custom asset input if it was showing
-             const cav = document.getElementById('customAssetDiv');
-             if (cav) cav.style.display = 'none';
-
-             console.log('Selected asset:', asset);
-         }
-         
-         function showCustomAssetInput() {
-             // Remove active class from all asset buttons
-             document.querySelectorAll('.asset-btn').forEach(btn => {
-                 btn.classList.remove('active');
-             });
-             
-             // Show custom asset input
-             document.getElementById('customAssetDiv').style.display = 'block';
-             document.getElementById('customAssetInput').focus();
-             
-             // Clear selected asset
-             selectedAsset = '';
-         }
-         
-         function confirmCustomAsset() {
-             const customAssetEl = document.getElementById('customAssetInput');
-             const customAsset = customAssetEl.value.trim();
-
-             if (!customAsset) {
-                 alert('Please enter a custom asset symbol.');
-                 return;
-             }
-
-             // Normalize (trim)
-             const symbol = customAsset;
-
-             // Save to localStorage list
-             try {
-                 const listRaw = localStorage.getItem(STORAGE_KEYS.CUSTOM_ASSETS);
-                 const list = listRaw ? JSON.parse(listRaw) : [];
-                 if (!list.includes(symbol)) {
-                     list.push(symbol);
-                     localStorage.setItem(STORAGE_KEYS.CUSTOM_ASSETS, JSON.stringify(list));
-                 }
-             } catch (e) {
-                 console.warn('Could not persist custom asset to localStorage', e);
-             }
-
-             // Persist to server (best-effort)
-             fetch('/api/save-custom-asset', {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({ symbol })
-             }).then(r => r.json())
-               .then(resp => {
-                   if (!resp.success) {
-                       console.warn('Server did not save custom asset', resp);
-                   }
-               }).catch(err => {
-                   console.warn('Error saving custom asset to server', err);
-               });
-
-            // Add button and select it
-            addCustomAssetButton(symbol);
-            // Select the new asset: find button and click
-            const grid = document.getElementById('assetButtonGrid');
-            const newBtn = Array.from(grid.querySelectorAll('.asset-btn')).find(b => b.dataset.asset === symbol);
-            if (newBtn) {
-                newBtn.click();
-            }
-
-            // Hide custom asset input
-            document.getElementById('customAssetDiv').style.display = 'none';
-
-            // Clear input
-            customAssetEl.value = '';
-
-            // Notify user
-            // Use a non-blocking notification (replace alert with console + subtle DOM message if desired)
-            console.log(`Custom asset "${symbol}" selected and persisted`);
-         }
+        function deleteCustomAsset(event, symbol, source) {
+            event.stopPropagation();
+            if (!confirm("Are you sure you want to delete " + symbol + "?")) return;
+            
+            fetch('/api/delete-custom-asset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol, source: source })
+            })
+            .then(r => r.json())
+            .then(resp => {
+                if(resp.success) {
+                    loadPersistentAssets();
+                } else {
+                    alert('Failed to delete asset: ' + resp.error);
+                }
+            });
+        }
         
-                 function runAnalysis() {
-             const dataSource = 'live'; // Always use live data
-             const timeframe = selectedTimeframe;
+        function runAnalysis() {
+            const dataSource = selectedSource;
+            const tfInput = document.getElementById('customTimeframeInput');
+            if (!tfInput) return;
+            const timeframe = tfInput.value.trim();
+            const asset = selectedAsset;
+            
+            if (!asset) {
+                alert('Please select an asset or add a new one.');
+                return;
+            }
+            if (!timeframe) {
+                alert('Please specify a timeframe.');
+                return;
+            }
+            
+            const useCurrentTime = document.getElementById('useCurrentTime').checked;
+            const bars = parseInt(document.getElementById('barsCount').value) || 100;
+            const startDate = document.getElementById('startDate') ? document.getElementById('startDate').value : '';
+            const startTime = document.getElementById('startTime') ? document.getElementById('startTime').value : '00:00';
+             const endDate = document.getElementById('endDate') ? document.getElementById('endDate').value : '';
+             const endTime = document.getElementById('endTime') ? document.getElementById('endTime').value : '23:59';
              
-             // Get asset value from selected asset
-             let asset = selectedAsset;
-             
-             // Validate inputs
-             if (!asset || !timeframe) {
-                 alert('Please select both asset and timeframe.');
-                 return;
-             }
-             
-             // Get date and time values
-             const startDate = document.getElementById('startDate').value;
-             const startTime = document.getElementById('startTime').value;
-             const endDate = document.getElementById('endDate').value;
-             const endTime = document.getElementById('endTime').value;
-             const useCurrentTime = document.getElementById('useCurrentTime').checked;
-             
-             // Validate dates
-             if (!startDate || !endDate) {
+             if (!useCurrentTime && (!startDate || !endDate)) {
                  alert('Please select both start and end dates.');
                  return;
              }
              
-             // Show loading state
-             const analyzeBtn = document.getElementById('analyzeBtn');
-             const originalText = analyzeBtn.innerHTML;
-             analyzeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
-             analyzeBtn.disabled = true;
+             let endpoint = '/api/analyze';
+             if (dataSource === 'mt5') endpoint = '/api/analyze-mt5';
+             else if (dataSource === 'bitkub') endpoint = '/api/analyze-bitkub';
+             else if (dataSource === 'binance') endpoint = '/api/analyze-binance';
              
-             // Prepare request data
+             const analyzeBtn = document.getElementById('analyzeBtn');
+             if(analyzeBtn) {
+                 analyzeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+                 analyzeBtn.disabled = true;
+             }
+             
              const requestData = {
                  data_source: dataSource,
-                 asset: asset,
+                 symbol: asset,
+                 asset: asset, 
                  timeframe: timeframe,
+                 bars: bars,
                  start_date: startDate,
                  start_time: startTime,
                  end_date: endDate,
@@ -1664,117 +1475,29 @@
                  redirect_to_output: true
              };
              
-             // Make API call
-             fetch('/api/analyze', {
+             fetch(endpoint, {
                  method: 'POST',
-                 headers: {
-                     'Content-Type': 'application/json',
-                 },
+                 headers: { 'Content-Type': 'application/json' },
                  body: JSON.stringify(requestData)
              })
-             .then(response => response.json())
-            .then(data => {
-                if (data.redirect) {
-                    // Store full results (with images) in sessionStorage before redirect
-                    if (data.full_results) {
-                        sessionStorage.setItem('analysisResults', JSON.stringify(data.full_results));
-                    }
-                    // Redirect to output page with results
-                    window.location.href = data.redirect;
-                 } else if (data.error) {
-                     // Show error message
-                     alert('Analysis failed: ' + data.error);
-                     // Reset button
-                     analyzeBtn.innerHTML = originalText;
-                     analyzeBtn.disabled = false;
-                 } else {
-                     // Handle other responses
-                     console.log('Analysis completed:', data);
-                     alert('Analysis completed successfully!');
-                     // Reset button
-                     analyzeBtn.innerHTML = originalText;
-                     analyzeBtn.disabled = false;
+             .then(r => r.json())
+             .then(data => {
+                 if(data.redirect) {
+                     if (data.full_results) {
+                         sessionStorage.setItem('analysisResults', JSON.stringify(data.full_results));
+                     }
+                     window.location.href = data.redirect;
+                 } else if(data.error) {
+                     alert("Analysis Error: " + data.error);
+                     if(analyzeBtn){ analyzeBtn.innerHTML = '<i class="fas fa-play"></i> Start Analysis'; analyzeBtn.disabled=false; }
                  }
              })
-             .catch(error => {
-                 console.error('Error:', error);
-                 alert('An error occurred during analysis. Please try again.');
-                 // Reset button
-                 analyzeBtn.innerHTML = originalText;
-                 analyzeBtn.disabled = false;
+             .catch(e => {
+                 alert("Request failed: " + e.message);
+                 if(analyzeBtn){ analyzeBtn.innerHTML = '<i class="fas fa-play"></i> Start Analysis'; analyzeBtn.disabled=false; }
              });
         }
-        
-        function handleUseCurrentTimeChange() {
-            const useCurrentTime = document.getElementById('useCurrentTime');
-            const endTimeInput = document.getElementById('endTime');
-            const endDateInput = document.getElementById('endDate');
-            
-            if (useCurrentTime.checked) {
-                // Lock both end date and end time
-                endTimeInput.disabled = true;
-                endDateInput.disabled = true;
-                endTimeInput.style.opacity = '0.5';
-                endDateInput.style.opacity = '0.5';
-                
-                // Set to current date and time
-                const now = new Date();
-                const currentDate = now.toISOString().split('T')[0];
-                const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
-                
-                endDateInput.value = currentDate;
-                endTimeInput.value = currentTime;
-                
-                // Add visual indication
-                endDateInput.title = 'Locked: Using current date/time';
-                endTimeInput.title = 'Locked: Using current date/time';
-            } else {
-                // Unlock both inputs
-                endTimeInput.disabled = false;
-                endDateInput.disabled = false;
-                endTimeInput.style.opacity = '1';
-                endDateInput.style.opacity = '1';
-                
-                // Remove visual indication
-                endDateInput.title = '';
-                endTimeInput.title = '';
-            }
-        }
-        
-        function updateCurrentTime() {
-            const useCurrentTime = document.getElementById('useCurrentTime');
-            if (useCurrentTime.checked) {
-                const now = new Date();
-                const currentDate = now.toISOString().split('T')[0];
-                const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
-                
-                document.getElementById('endDate').value = currentDate;
-                document.getElementById('endTime').value = currentTime;
-            }
-        }
-        
-        function validateDateRange() {
-            // Simple date validation
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-            
-            if (startDate && endDate && startDate > endDate) {
-                document.getElementById('dateRangeError').style.display = 'block';
-                document.getElementById('dateRangeErrorText').textContent = 'Start date cannot be after end date';
-            } else {
-                document.getElementById('dateRangeError').style.display = 'none';
-            }
-        }
-        
-        function hideDateValidation() {
-            document.getElementById('dateRangeError').style.display = 'none';
-            document.getElementById('dateRangeInfo').style.display = 'none';
-        }
-        
-                 function updateTimeframeLimits() {
-             // Placeholder for timeframe limits functionality
-             console.log('Timeframe limits updated');
-         }
+
          
          // Provider and API Key Management Functions
          function handleProviderChange() {

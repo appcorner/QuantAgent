@@ -605,27 +605,60 @@ class WebTradingAnalyzer:
                 with open(self.custom_assets_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, list):
-                        return data
+                        # Validate structure: if it's strings, migrate to objects with yfinance source
+                        migrated = []
+                        for item in data:
+                            if isinstance(item, str):
+                                migrated.append({"symbol": item, "source": "yfinance"})
+                            elif isinstance(item, dict) and "symbol" in item:
+                                migrated.append(item)
+                        # Save migrated format optionally, but we'll do it on next save
+                        return migrated
             return []
         except Exception as e:
             print(f"Error loading custom assets: {e}")
             return []
 
-    def save_custom_asset(self, symbol: str) -> bool:
-        """Save a custom asset symbol persistently (avoid duplicates)."""
+    def save_custom_asset(self, custom_obj: dict) -> bool:
+        """Save a custom asset symbol and source persistently."""
         try:
-            symbol = symbol.strip()
+            symbol = custom_obj.get("symbol", "").strip()
+            source = custom_obj.get("source", "yfinance").strip()
+            
             if not symbol:
                 return False
-            if symbol in self.custom_assets:
-                return True  # already present
-            self.custom_assets.append(symbol)
+                
+            # Check if exists
+            for item in self.custom_assets:
+                if item.get("symbol") == symbol and item.get("source") == source:
+                    return True  # already present
+                    
+            self.custom_assets.append({"symbol": symbol, "source": source})
+            
             # write to file
             with open(self.custom_assets_file, "w", encoding="utf-8") as f:
                 json.dump(self.custom_assets, f, indent=2)
             return True
         except Exception as e:
-            print(f"Error saving custom asset '{symbol}': {e}")
+            print(f"Error saving custom asset '{custom_obj}': {e}")
+            return False
+
+    def delete_custom_asset(self, symbol: str, source: str) -> bool:
+        """Delete a custom asset persistently."""
+        try:
+            symbol = symbol.strip()
+            source = source.strip()
+            
+            original_len = len(self.custom_assets)
+            self.custom_assets = [item for item in self.custom_assets 
+                                  if not (item.get("symbol") == symbol and item.get("source") == source)]
+                                  
+            if len(self.custom_assets) < original_len:
+                with open(self.custom_assets_file, "w", encoding="utf-8") as f:
+                    json.dump(self.custom_assets, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error deleting custom asset: {e}")
             return False
 
 
@@ -701,22 +734,27 @@ def analyze():
         end_date = data.get("end_date")
         end_time = data.get("end_time", "23:59")
         use_current_time = data.get("use_current_time", False)
+        bars = int(data.get("bars", 100))
 
-        # Create datetime objects for validation
-        if start_date:
-            start_datetime_str = f"{start_date} {start_time}"
-            try:
-                start_dt = datetime.strptime(start_datetime_str, "%Y-%m-%d %H:%M")
-            except ValueError:
-                return jsonify({"error": "Invalid start date/time format."})
+        if use_current_time:
+            end_dt = datetime.now()
+            from datetime import timedelta
+            multiplier = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440, "1w": 10080, "1mo": 43200}.get(timeframe, 60)
+            mins_to_fetch = bars * multiplier * 2.5  # 2.5x buffer for weekends/holidays
+            start_dt = end_dt - timedelta(minutes=int(mins_to_fetch))
+        else:
+            # Create datetime objects for validation using provided dates
+            if start_date:
+                start_datetime_str = f"{start_date} {start_time}"
+                try:
+                    start_dt = datetime.strptime(start_datetime_str, "%Y-%m-%d %H:%M")
+                except ValueError:
+                    return jsonify({"error": "Invalid start date/time format."})
 
-            if start_dt > datetime.now():
-                return jsonify({"error": "Start date/time cannot be in the future."})
+                if start_dt > datetime.now():
+                    return jsonify({"error": "Start date/time cannot be in the future."})
 
-        if end_date:
-            if use_current_time:
-                end_dt = datetime.now()
-            else:
+            if end_date:
                 end_datetime_str = f"{end_date} {end_time}"
                 try:
                     end_dt = datetime.strptime(end_datetime_str, "%Y-%m-%d %H:%M")
@@ -726,15 +764,19 @@ def analyze():
                 if end_dt > datetime.now():
                     return jsonify({"error": "End date/time cannot be in the future."})
 
-            if start_date and start_dt and end_dt and end_dt < start_dt:
-                return jsonify(
-                    {"error": "End date/time cannot be earlier than start date/time."}
-                )
+                if start_date and start_dt and end_dt and end_dt < start_dt:
+                    return jsonify(
+                        {"error": "End date/time cannot be earlier than start date/time."}
+                    )
 
         # Fetch data with datetime objects
         df = analyzer.fetch_yfinance_data_with_datetime(
             asset, timeframe, start_dt, end_dt
         )
+        
+        # If using bars mode, slice the exact amount requested from the tail
+        if use_current_time and not df.empty and len(df) > bars:
+            df = df.tail(bars)
         if df.empty:
             return jsonify({"error": "No data available for the specified parameters"})
 
@@ -817,10 +859,11 @@ def analyze_mt5():
             return jsonify({"error": f"Cannot reach mt5-bridge server at {client.base_url}: {health}"})
 
         # Decide fetch mode: date-range vs latest N bars
+        use_current_time = data.get("use_current_time", False)
         start_date = data.get("start_date")
         end_date = data.get("end_date")
 
-        if start_date and end_date:
+        if not use_current_time and start_date and end_date:
             start_time = data.get("start_time", "00:00")
             end_time = data.get("end_time", "23:59")
             try:
@@ -914,10 +957,11 @@ def analyze_bitkub():
         client = BitkubClient()
 
         # Decide fetch mode: date-range vs latest N bars
+        use_current_time = data.get("use_current_time", False)
         start_date = data.get("start_date")
         end_date = data.get("end_date")
 
-        if start_date and end_date:
+        if not use_current_time and start_date and end_date:
             start_time = data.get("start_time", "00:00")
             end_time = data.get("end_time", "23:59")
             try:
@@ -1027,10 +1071,11 @@ def analyze_binance():
              return jsonify({"error": f"Cannot reach Binance API: {status.get('detail')}"})
 
         # Decide fetch mode: date-range vs latest N bars
+        use_current_time = data.get("use_current_time", False)
         start_date = data.get("start_date")
         end_date = data.get("end_date")
 
-        if start_date and end_date:
+        if not use_current_time and start_date and end_date:
             start_time = data.get("start_time", "00:00")
             end_time = data.get("end_time", "23:59")
             try:
@@ -1105,17 +1150,37 @@ def save_custom_asset():
     try:
         data = request.get_json()
         symbol = (data.get("symbol") or "").strip()
+        source = (data.get("source") or "yfinance").strip()
+        
         if not symbol:
             return jsonify({"success": False, "error": "Symbol required"}), 400
 
-        ok = analyzer.save_custom_asset(symbol)
+        ok = analyzer.save_custom_asset({"symbol": symbol, "source": source})
         if not ok:
             return jsonify({"success": False, "error": "Failed to save symbol"}), 500
 
-        return jsonify({"success": True, "symbol": symbol})
+        return jsonify({"success": True, "symbol": symbol, "source": source})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route("/api/delete-custom-asset", methods=["POST", "DELETE"])
+def delete_custom_asset():
+    """Delete a custom asset."""
+    try:
+        data = request.get_json()
+        symbol = (data.get("symbol") or "").strip()
+        source = (data.get("source") or "yfinance").strip()
+        
+        if not symbol:
+            return jsonify({"success": False, "error": "Symbol required"}), 400
+
+        ok = analyzer.delete_custom_asset(symbol, source)
+        if not ok:
+            return jsonify({"success": False, "error": "Failed to delete"}), 500
+
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/api/custom-assets", methods=["GET"])
 def custom_assets():
@@ -1140,7 +1205,10 @@ def get_assets():
 
         # Include server-persisted custom assets at the end
         for custom in analyzer.custom_assets:
-            asset_list.append({"code": custom, "name": custom})
+            if isinstance(custom, dict):
+                asset_list.append({"code": custom.get("symbol"), "name": custom.get("symbol"), "source": custom.get("source")})
+            else:
+                asset_list.append({"code": custom, "name": custom, "source": "yfinance"})
 
         return jsonify({"assets": asset_list})
 
