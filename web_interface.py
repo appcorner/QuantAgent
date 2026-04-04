@@ -12,6 +12,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 from openai import OpenAI
 
 import static_util
+from binance_data import BinanceAPIClient
 from bitkub_data import BitkubClient
 from mt5_data import MT5BridgeClient
 from trading_graph import TradingGraph
@@ -984,6 +985,96 @@ def bitkub_symbols():
             if s.get("status") == "active"
         ]
         return jsonify({"symbols": result})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.route("/api/analyze-binance", methods=["POST"])
+def analyze_binance():
+    """Run trading analysis using OHLC data from Binance Exchange.
+
+    Request JSON body:
+        symbol      (str, required): Binance symbol, e.g. BTCUSDT
+        timeframe   (str, optional): 1m|5m|15m|30m|1h|4h|1d|1w|1mo  (default: 1h)
+        bars        (int, optional): Number of latest bars to fetch (default: 100)
+        start_date  (str, optional): YYYY-MM-DD
+        start_time  (str, optional): HH:MM
+        end_date    (str, optional): YYYY-MM-DD
+        end_time    (str, optional): HH:MM
+        redirect_to_output (bool):   same behaviour as /api/analyze
+    """
+    try:
+        data = request.get_json()
+        symbol = (data.get("symbol") or data.get("asset", "")).strip().upper()
+        timeframe = data.get("timeframe", "1h")
+        bars = data.get("bars", 100)
+        redirect_to_output = data.get("redirect_to_output", False)
+
+        if not symbol:
+            return jsonify({"error": "Symbol is required (e.g. BTCUSDT)."})
+
+        # Validate timeframe
+        if timeframe not in BinanceAPIClient.TIMEFRAME_MAP:
+            return jsonify(
+                {"error": f"Unsupported timeframe '{timeframe}'. "
+                          f"Choose from: {', '.join(BinanceAPIClient.TIMEFRAME_MAP.keys())}"}
+            )
+
+        client = BinanceAPIClient()
+        
+        status = client.check_status()
+        if status.get("status") == "error":
+             return jsonify({"error": f"Cannot reach Binance API: {status.get('detail')}"})
+
+        # Decide fetch mode: date-range vs latest N bars
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+
+        if start_date and end_date:
+            start_time = data.get("start_time", "00:00")
+            end_time = data.get("end_time", "23:59")
+            try:
+                from datetime import timezone as _tz
+                start_dt = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M").replace(tzinfo=_tz.utc)
+                end_dt = datetime.strptime(f"{end_date} {end_time}", "%Y-%m-%d %H:%M").replace(tzinfo=_tz.utc)
+            except ValueError:
+                return jsonify({"error": "Invalid date/time format. Use YYYY-MM-DD and HH:MM."})
+
+            if start_dt >= end_dt:
+                return jsonify({"error": "Start date/time must be before end date/time."})
+
+            df = client.fetch_ohlc_range(symbol, timeframe, start_dt, end_dt)
+        else:
+            df = client.fetch_ohlc(symbol, timeframe, count=bars)
+
+        if df.empty:
+            return jsonify({"error": f"No data returned from Binance for {symbol} ({timeframe})."})
+
+        # Run the same analysis pipeline
+        results = analyzer.run_analysis(df, symbol, timeframe)
+        formatted_results = analyzer.extract_analysis_results(results)
+
+        # Handle redirect (same pattern as /api/analyze)
+        if redirect_to_output:
+            if formatted_results.get("success", False):
+                url_safe_results = formatted_results.copy()
+                url_safe_results["pattern_chart"] = ""
+                url_safe_results["trend_chart"] = ""
+                results_json = json.dumps(url_safe_results)
+                encoded_results = urllib.parse.quote(results_json)
+                redirect_url = f"/output?results={encoded_results}"
+                return jsonify(
+                    {
+                        "redirect": redirect_url,
+                        "full_results": formatted_results,
+                    }
+                )
+            else:
+                return jsonify(
+                    {"error": formatted_results.get("error", "Analysis failed")}
+                )
+
+        return jsonify(formatted_results)
     except Exception as e:
         return jsonify({"error": str(e)})
 
