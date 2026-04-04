@@ -16,6 +16,10 @@ from default_config import DEFAULT_CONFIG
 from graph_setup import SetGraph
 from graph_util import TechnicalTools
 
+from dotenv import load_dotenv, set_key
+
+ENV_FILE = ".env"
+load_dotenv(ENV_FILE)
 
 class TradingGraph:
     """
@@ -152,12 +156,23 @@ class TradingGraph:
         """
         api_key = self._get_api_key(provider)
         
+        
         if provider == "openai":
-            return ChatOpenAI(
-                model=model,
-                temperature=temperature,
-                api_key=api_key,
-            )
+            base_url = os.environ.get("OPENAI_BASE_URL", "")
+            if base_url:
+                #print(f"base_url -> [{base_url}]")
+                return ChatOpenAI(
+                    model=model,
+                    base_url=base_url,
+                    temperature=temperature,
+                    api_key=api_key,
+                )
+            else:
+                return ChatOpenAI(
+                    model=model,
+                    temperature=temperature,
+                    api_key=api_key,
+                )
         elif provider == "anthropic":
             # ChatAnthropic handles SystemMessage extraction automatically
             # It extracts SystemMessage from the message list and passes it as 'system' parameter
@@ -241,18 +256,21 @@ class TradingGraph:
             self.config["api_key"] = api_key
             
             # Also update the environment variable for consistency
+            set_key(ENV_FILE, "OPENAI_API_KEY", api_key)
             os.environ["OPENAI_API_KEY"] = api_key
         elif provider == "anthropic":
             # Update the config with the new API key
             self.config["anthropic_api_key"] = api_key
             
             # Also update the environment variable for consistency
+            set_key(ENV_FILE, "ANTHROPIC_API_KEY", api_key)
             os.environ["ANTHROPIC_API_KEY"] = api_key
         elif provider == "qwen":
             # Update the config with the new API key
             self.config["qwen_api_key"] = api_key
             
             # Also update the environment variable for consistency
+            set_key(ENV_FILE, "DASHSCOPE_API_KEY", api_key)
             os.environ["DASHSCOPE_API_KEY"] = api_key
         else:
             raise ValueError(f"Unsupported provider: {provider}. Must be 'openai', 'anthropic', or 'qwen'")

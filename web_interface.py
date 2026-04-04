@@ -12,10 +12,15 @@ from flask import Flask, jsonify, render_template, request, send_file
 from openai import OpenAI
 
 import static_util
+from mt5_data import MT5BridgeClient
 from trading_graph import TradingGraph
 
-app = Flask(__name__)
+from dotenv import load_dotenv, set_key
 
+ENV_FILE = ".env"
+load_dotenv(ENV_FILE)
+
+app = Flask(__name__)
 
 class WebTradingAnalyzer:
     def __init__(self):
@@ -320,6 +325,7 @@ class WebTradingAnalyzer:
 
         except Exception as e:
             error_msg = str(e)
+            print(error_msg)
             
             # Get current provider from config
             provider = self.config.get("agent_llm_provider", "openai")
@@ -497,7 +503,14 @@ class WebTradingAnalyzer:
             
             if provider == "openai":
                 from openai import OpenAI
-                client = OpenAI()
+
+                base_url = os.environ.get("OPENAI_BASE_URL", "")
+                api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("api_key", "")
+
+                if base_url:
+                    client = OpenAI(api_key=api_key, base_url=base_url)
+                else:
+                    client = OpenAI(api_key=api_key)
                 
                 # Make a simple test call
                 _ = client.chat.completions.create(
@@ -761,6 +774,110 @@ def analyze():
         return jsonify({"error": str(e)})
 
 
+@app.route("/api/analyze-mt5", methods=["POST"])
+def analyze_mt5():
+    """Run trading analysis using OHLC data from MetaTrader 5 via mt5-bridge.
+
+    Request JSON body:
+        symbol      (str, required): MT5 symbol, e.g. XAUUSD, EURUSD
+        timeframe   (str, optional): 1m|5m|15m|30m|1h|4h|1d|1w  (default: 1h)
+        bars        (int, optional): Number of latest bars to fetch (default: 100)
+        start_date  (str, optional): YYYY-MM-DD  — if given together with end_date,
+        start_time  (str, optional): HH:MM       — uses date-range mode instead of bars
+        end_date    (str, optional): YYYY-MM-DD
+        end_time    (str, optional): HH:MM
+        mt5_url     (str, optional): mt5-bridge server URL override
+        redirect_to_output (bool):   same behaviour as /api/analyze
+    """
+    try:
+        data = request.get_json()
+        symbol = (data.get("symbol") or data.get("asset", "")).strip().upper()
+        timeframe = data.get("timeframe", "1h")
+        bars = data.get("bars", 100)
+        mt5_url = data.get("mt5_url")  # None → falls back to env / default
+        redirect_to_output = data.get("redirect_to_output", False)
+
+        if not symbol:
+            return jsonify({"error": "Symbol is required."})
+
+        # Validate timeframe
+        if timeframe not in MT5BridgeClient.TIMEFRAME_MAP:
+            return jsonify(
+                {"error": f"Unsupported timeframe '{timeframe}'. "
+                          f"Choose from: {', '.join(MT5BridgeClient.TIMEFRAME_MAP.keys())}"}
+            )
+
+        client = MT5BridgeClient(base_url=mt5_url)
+
+        # Check mt5-bridge health
+        health = client.check_health()
+        if health.get("status") != "ok":
+            return jsonify({"error": f"Cannot reach mt5-bridge server at {client.base_url}: {health}"})
+
+        # Decide fetch mode: date-range vs latest N bars
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+
+        if start_date and end_date:
+            start_time = data.get("start_time", "00:00")
+            end_time = data.get("end_time", "23:59")
+            try:
+                from datetime import timezone as _tz
+                start_dt = datetime.strptime(f"{start_date} {start_time}", "%Y-%m-%d %H:%M").replace(tzinfo=_tz.utc)
+                end_dt = datetime.strptime(f"{end_date} {end_time}", "%Y-%m-%d %H:%M").replace(tzinfo=_tz.utc)
+            except ValueError:
+                return jsonify({"error": "Invalid date/time format. Use YYYY-MM-DD and HH:MM."})
+
+            if start_dt >= end_dt:
+                return jsonify({"error": "Start date/time must be before end date/time."})
+
+            df = client.fetch_ohlc_range(symbol, timeframe, start_dt, end_dt)
+        else:
+            df = client.fetch_ohlc(symbol, timeframe, count=bars)
+
+        if df.empty:
+            return jsonify({"error": f"No data returned from MT5 for {symbol} ({timeframe})."})
+
+        # Run the same analysis pipeline as /api/analyze
+        results = analyzer.run_analysis(df, symbol, timeframe)
+        formatted_results = analyzer.extract_analysis_results(results)
+
+        # Handle redirect (same pattern as /api/analyze)
+        if redirect_to_output:
+            if formatted_results.get("success", False):
+                url_safe_results = formatted_results.copy()
+                url_safe_results["pattern_chart"] = ""
+                url_safe_results["trend_chart"] = ""
+                results_json = json.dumps(url_safe_results)
+                encoded_results = urllib.parse.quote(results_json)
+                redirect_url = f"/output?results={encoded_results}"
+                return jsonify(
+                    {
+                        "redirect": redirect_url,
+                        "full_results": formatted_results,
+                    }
+                )
+            else:
+                return jsonify(
+                    {"error": formatted_results.get("error", "Analysis failed")}
+                )
+
+        return jsonify(formatted_results)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+@app.route("/api/mt5-health")
+def mt5_health():
+    """Check mt5-bridge server health."""
+    try:
+        mt5_url = request.args.get("url")
+        client = MT5BridgeClient(base_url=mt5_url)
+        return jsonify(client.check_health())
+    except Exception as e:
+        return jsonify({"status": "error", "detail": str(e)})
+
+
 @app.route("/api/files/<asset>/<timeframe>")
 def get_files(asset, timeframe):
     """API endpoint to get available files for an asset/timeframe."""
@@ -898,9 +1015,9 @@ def update_provider():
         else:
             # Set default OpenAI models if not already set to OpenAI models
             if analyzer.config["agent_llm_model"].startswith(("claude", "qwen")):
-                analyzer.config["agent_llm_model"] = "gpt-4o-mini"
+                analyzer.config["agent_llm_model"] = os.environ.get("AGENT_LLM_MODEL", "gpt-4o-mini")
             if analyzer.config["graph_llm_model"].startswith(("claude", "qwen")):
-                analyzer.config["graph_llm_model"] = "gpt-4o"
+                analyzer.config["graph_llm_model"] = os.environ.get("GRAPH_LLM_MODEL", "gpt-4o")
         
         analyzer.trading_graph.config.update(analyzer.config)
 
@@ -908,6 +1025,10 @@ def update_provider():
         analyzer.trading_graph.refresh_llms()
 
         print(f"Provider updated to {provider} successfully")
+        if provider == "openai":
+            base_url = os.environ.get("OPENAI_BASE_URL", "")
+            if base_url:
+                print(f"base_url updated to {base_url} successfully")
         print(f"graph_llm_model updated to {analyzer.config['graph_llm_model']} successfully")
         print(f"agent_llm updated to {analyzer.config['agent_llm_model']} successfully")
         return jsonify({"success": True, "message": f"Provider updated to {provider}"})
@@ -935,10 +1056,13 @@ def update_api_key():
 
         # Update the environment variable
         if provider == "openai":
+            set_key(ENV_FILE, "OPENAI_API_KEY", new_api_key)
             os.environ["OPENAI_API_KEY"] = new_api_key
         elif provider == "anthropic":
+            set_key(ENV_FILE, "ANTHROPIC_API_KEY", new_api_key)
             os.environ["ANTHROPIC_API_KEY"] = new_api_key
         elif provider == "qwen":
+            set_key(ENV_FILE, "DASHSCOPE_API_KEY", new_api_key)
             os.environ["DASHSCOPE_API_KEY"] = new_api_key
 
         # Update the API key in the trading graph
@@ -976,6 +1100,8 @@ def get_api_key_status():
                 api_key = analyzer.config.get("qwen_api_key", "")
         else:
             api_key = ""
+
+        #print(f"api_key {api_key}")
         
         if api_key and api_key != "your-openai-api-key-here" and api_key != "":
             # Return masked version for security
