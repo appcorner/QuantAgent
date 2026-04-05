@@ -121,13 +121,13 @@ graph TB
     BMCP --> E_BIN
     BKMCP --> E_BIT
 
-    style DataSources fill:#1e293b,color:#94a3b8
-    style WebApp fill:#1e3a5f,color:#93c5fd
-    style AgentGraph fill:#1a2e1a,color:#86efac
-    style LLM fill:#3b1f47,color:#d8b4fe
-    style MCP fill:#3b2a1a,color:#fdba74
-    style CLI fill:#1e2a3b,color:#7dd3fc
-    style Exchange fill:#2d1b1b,color:#fca5a5
+    style DataSources fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    style WebApp fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
+    style AgentGraph fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style LLM fill:#f3e8ff,stroke:#9333ea,color:#3b0764
+    style MCP fill:#ffedd5,stroke:#ea580c,color:#7c2d12
+    style CLI fill:#e0e7ff,stroke:#4f46e5,color:#312e81
+    style Exchange fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
 ```
 
 ## 🚀 ฟีเจอร์
