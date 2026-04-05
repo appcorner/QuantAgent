@@ -61,6 +61,77 @@ A sophisticated multi-agent trading analysis system that combines technical indi
 
 </div>
 
+## 🗺️ Architecture Overview
+
+```mermaid
+graph TB
+    subgraph DataSources ["📡 Data Sources"]
+        YF["🟡 Yahoo Finance<br/>yfinance"]
+        BIN["🟠 Binance<br/>python-binance"]
+        BIT["🔵 Bitkub<br/>Public REST API"]
+        MT5["🟢 MetaTrader 5<br/>mt5-bridge"]
+    end
+
+    subgraph CLI ["⌨️ CLI Analyzers"]
+        BCLI["binance_analyze.py"]
+        BKCLI["bitkub_analyze.py"]
+        M5CLI["mt5_analyze.py"]
+    end
+
+    subgraph WebApp ["🌐 Web Application (Flask)"]
+        UI["demo_new.html<br/>Interactive UI"]
+        API["web_interface.py<br/>REST API Endpoints"]
+        CFG["Custom Assets<br/>custom_assets.json"]
+    end
+
+    subgraph AgentGraph ["🤖 Multi-Agent Analysis Graph (LangGraph)"]
+        IA["📊 Indicator Agent<br/>RSI · MACD · Stochastic"]
+        PA["🔍 Pattern Agent<br/>Chart Pattern Recognition"]
+        TA["📈 Trend Agent<br/>Channel & Trend Analysis"]
+        DA["📋 Decision Agent<br/>LONG / SHORT Signal"]
+    end
+
+    subgraph LLM ["🧠 LLM Providers"]
+        OAI["OpenAI<br/>gpt-4o / gpt-4o-mini"]
+        ANT["Anthropic<br/>Claude"]
+        QWN["Qwen<br/>DashScope"]
+    end
+
+    subgraph MCP ["🤖 MCP Trading Servers"]
+        MMCP["mt5_trading_server.py"]
+        BMCP["binance_trading_server.py"]
+        BKMCP["bitkub_trading_server.py"]
+    end
+
+    subgraph Exchange ["🏦 Live Exchanges"]
+        E_BIN["Binance API"]
+        E_BIT["Bitkub API"]
+        E_MT5["MT5 Broker"]
+    end
+
+    BIN & BIT & MT5 & YF --> API
+    BIN & BIT & MT5 --> CLI
+    API --> AgentGraph
+    CLI --> AgentGraph
+    IA --> PA --> TA --> DA
+    DA --> LLM
+    LLM --> DA
+    UI <--> API
+    API --> CFG
+
+    MMCP --> E_MT5
+    BMCP --> E_BIN
+    BKMCP --> E_BIT
+
+    style DataSources fill:#1e293b,color:#94a3b8
+    style WebApp fill:#1e3a5f,color:#93c5fd
+    style AgentGraph fill:#1a2e1a,color:#86efac
+    style LLM fill:#3b1f47,color:#d8b4fe
+    style MCP fill:#3b2a1a,color:#fdba74
+    style CLI fill:#1e2a3b,color:#7dd3fc
+    style Exchange fill:#2d1b1b,color:#fca5a5
+```
+
 ## 🚀 Features
 
 <!-- - **Multi-Agent Analysis**: Four specialized agents working together: -->
@@ -312,6 +383,7 @@ This repository was built with the help of the following libraries and framework
 - [**yfinance**](https://github.com/ranaroussi/yfinance)
 - [**python-binance**](https://github.com/sammchardy/python-binance)
 - [**Bitkub Official API Docs**](https://github.com/bitkub/bitkub-official-api-docs)
+- [**MT5 Bridge**](https://github.com/akivajp/mt5-bridge)
 - [**MCP**](https://github.com/modelcontextprotocol/python-sdk)
 - [**Flask**](https://github.com/pallets/flask)
 - [**TechnicalAnalysisAutomation**](https://github.com/neurotrader888/TechnicalAnalysisAutomation/tree/main)

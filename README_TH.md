@@ -59,6 +59,77 @@
 
 </div>
 
+## 🗺️ แผนผังสถาปัตยกรรมระบบ (Architecture Overview)
+
+```mermaid
+graph TB
+    subgraph DataSources ["📡 แหล่งข้อมูล (Data Sources)"]
+        YF["🟡 Yahoo Finance\nyfinance"]
+        BIN["🟠 Binance\npython-binance"]
+        BIT["🔵 Bitkub\nPublic REST API"]
+        MT5["🟢 MetaTrader 5\nmt5-bridge"]
+    end
+
+    subgraph CLI ["⌨️ สคริปต์ CLI"]
+        BCLI["binance_analyze.py"]
+        BKCLI["bitkub_analyze.py"]
+        M5CLI["mt5_analyze.py"]
+    end
+
+    subgraph WebApp ["🌐 เว็บแอปพลิเคชัน (Flask)"]
+        UI["demo_new.html\nหน้า UI"]
+        API["web_interface.py\nREST API"]
+        CFG["Custom Assets\ncustom_assets.json"]
+    end
+
+    subgraph AgentGraph ["🤖 Multi-Agent Graph (LangGraph)"]
+        IA["📊 Indicator Agent\nRSI · MACD · Stochastic"]
+        PA["🔍 Pattern Agent\nวิเคราะห์รูปแบบกราฟ"]
+        TA["📈 Trend Agent\nวิเคราะห์แนวโน้ม"]
+        DA["📋 Decision Agent\nสัญญาณ LONG / SHORT"]
+    end
+
+    subgraph LLM ["🧠 LLM Providers"]
+        OAI["OpenAI\ngpt-4o / gpt-4o-mini"]
+        ANT["Anthropic\nClaude"]
+        QWN["Qwen\nDashScope"]
+    end
+
+    subgraph MCP ["🤖 MCP Trading Servers"]
+        MMCP["mt5_trading_server.py"]
+        BMCP["binance_trading_server.py"]
+        BKMCP["bitkub_trading_server.py"]
+    end
+
+    subgraph Exchange ["🏦 กระดานเทรด"]
+        E_BIN["Binance API"]
+        E_BIT["Bitkub API"]
+        E_MT5["MT5 Broker"]
+    end
+
+    BIN & BIT & MT5 & YF --> API
+    BIN & BIT & MT5 --> CLI
+    API --> AgentGraph
+    CLI --> AgentGraph
+    IA --> PA --> TA --> DA
+    DA --> LLM
+    LLM --> DA
+    UI <--> API
+    API --> CFG
+
+    MMCP --> E_MT5
+    BMCP --> E_BIN
+    BKMCP --> E_BIT
+
+    style DataSources fill:#1e293b,color:#94a3b8
+    style WebApp fill:#1e3a5f,color:#93c5fd
+    style AgentGraph fill:#1a2e1a,color:#86efac
+    style LLM fill:#3b1f47,color:#d8b4fe
+    style MCP fill:#3b2a1a,color:#fdba74
+    style CLI fill:#1e2a3b,color:#7dd3fc
+    style Exchange fill:#2d1b1b,color:#fca5a5
+```
+
 ## 🚀 ฟีเจอร์
 
   ### Indicator Agent (ตัวแทนวิเคราะห์อินดิเคเตอร์)
@@ -284,6 +355,7 @@ This repository was built with the help of the following libraries and framework
 - [**yfinance**](https://github.com/ranaroussi/yfinance)
 - [**python-binance**](https://github.com/sammchardy/python-binance)
 - [**Bitkub Official API Docs**](https://github.com/bitkub/bitkub-official-api-docs)
+- [**MT5 Bridge**](https://github.com/akivajp/mt5-bridge)
 - [**MCP**](https://github.com/modelcontextprotocol/python-sdk)
 - [**Flask**](https://github.com/pallets/flask)
 - [**TechnicalAnalysisAutomation**](https://github.com/neurotrader888/TechnicalAnalysisAutomation/tree/main)
