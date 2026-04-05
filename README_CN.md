@@ -30,7 +30,7 @@
 </div>
 
 <div align="center" style="margin: 20px 0;">
-  <a href="README.md">English</a> | <a href="README_CN.md">中文</a>
+  <a href="README.md">English</a> | <a href="README_CN.md">中文</a> | <a href="README_TH.md">ภาษาไทย</a>
 </div>
 
 <br>
@@ -88,11 +88,20 @@
 
 ### 网络界面
 基于 Flask 的现代网络应用程序，具有：
-  - 来自雅虎财经的实时市场数据
-  - 交互式资产选择（股票、加密货币、商品、指数）
+  - 来自多数据源（Yahoo Finance、MetaTrader 5、Binance、Bitkub）的实时市场数据
+  - 交互式资产选择（股票、加密货币、商品、外汇等）
+  - 灵活定制化时间刻度（支持切换成指定日期范围或提取最近的 K线 Bars）
   - 多时间框架分析（1分钟到1天）
-  - 动态图表生成
-  - API 密钥管理
+  - 动态图表生成及统一操作界面
+  - API 密钥管理以及根据不同数据源管理自定义资产配置的功能
+
+### 🤖 AI 交易代理 (MCP)
+系统现配有 **Model Context Protocol (MCP)** 服务器，允许外部 AI 代理或桌面应用程序直接自主执行交易逻辑和操作策略：
+- **`mcp_servers/mt5_trading_server.py`**: MT5 自动化交易（需预装 `mt5-bridge` 服务器）。
+- **`mcp_servers/binance_trading_server.py`**: 币安 (Binance) 现货与 USDS-M 合约交易。
+- **`mcp_servers/bitkub_trading_server.py`**: Bitkub 现货交易（基于 HMAC-SHA256 安全验证）。
+
+这些服务器开放了标准化的工具集，允许类似于 LLMs 的 AI 来直接查询余额、获取未平仓订单及挂单与平仓等。
 
 ## 📦 安装
 
@@ -107,6 +116,8 @@ conda activate quantagents
 
 ```bash
 pip install -r requirements.txt
+# 目前新增了支持多交易所与MCP代理的扩展模块：
+pip install python-binance pandas requests flask yfinance mcp
 ```
 
 如果您遇到 TA-lib-python 的问题，请尝试：
@@ -130,8 +141,14 @@ export OPENAI_API_KEY="your_openai_api_key_here"
 # For Anthropic (Claude)
 export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
 
-# For Qwen (DashScope, based in Singapore — delays may occur)
+# For Qwen (DashScope)
 export DASHSCOPE_API_KEY="your_dashscope_api_key_here"
+
+# 交易所相关 API 配置（用于 MCP 自动交易或加密数据后端读取）
+export BINANCE_API_KEY="your_binance_key"
+export BINANCE_API_SECRET="your_binance_secret"
+export BITKUB_API_KEY="your_bitkub_key"
+export BITKUB_API_SECRET="your_bitkub_secret"
 
 ```
 
@@ -167,6 +184,28 @@ print(final_state.get("indicator_report"))
 print(final_state.get("pattern_report"))
 print(final_state.get("trend_report"))
 ```
+
+### 多交易所 CLI 分析工具 (命令行使用)
+
+您还可以直接通过终端 / 命令行运行自动化定量分析，而无需启动 Web 服务器。我们为每个数据源专门集成了对应的独立 CLI 脚本，它们均接受标准参数以用于提取指定数量的 K线 (Bars) 或精确的日期段：
+
+```bash
+# 币安 (Binance) 现货市场分析器
+python binance_analyze.py --symbol BTCUSDT --timeframe 1h --bars 100
+
+# Bitkub 分析器 (泰国本地交易所 API)
+python bitkub_analyze.py --symbol BTC_THB --timeframe 4h --start "2025-01-01" --end "2025-01-31"
+
+# MetaTrader 5 分析器 (需预装 mt5-bridge 服务器)
+python mt5_analyze.py --symbol XAUUSD --timeframe 15m --bars 200 --output report.json
+```
+
+**通用 CLI 参数 (Common CLI Arguments):**
+- `--symbol`：交易所专用的交易对或证券代码（必填）。
+- `--timeframe`：获取 K线 的时间窗口（例如 `1m`，`15m`，`1h`，`1d`）。
+- `--bars`：需要获取的最近 K线 数（当无指定日期限制时生效）。
+- `--start` / `--end`：采用精确的日期范围获取数据（格式要求 `YYYY-MM-DD` 或 `YYYY-MM-DD HH:MM`）。
+- `--output`：直接将完整的数据和策略报告输出保存至 JSON 格式（选填）。
 
 您还可以调整默认配置以在 web_interface.py 中设置您自己的 LLM 选择或分析参数。
 
@@ -264,6 +303,9 @@ python web_interface.py
 - [**Anthropic (Claude)**](https://github.com/anthropics/anthropic-sdk-python)
 - [**Qwen**](https://github.com/QwenLM/Qwen)
 - [**yfinance**](https://github.com/ranaroussi/yfinance)
+- [**python-binance**](https://github.com/sammchardy/python-binance)
+- [**Bitkub Official API Docs**](https://github.com/bitkub/bitkub-official-api-docs)
+- [**MCP**](https://github.com/modelcontextprotocol/python-sdk)
 - [**Flask**](https://github.com/pallets/flask)
 - [**TechnicalAnalysisAutomation**](https://github.com/neurotrader888/TechnicalAnalysisAutomation/tree/main)
 - [**tvdatafeed**](https://github.com/rongardF/tvdatafeed)

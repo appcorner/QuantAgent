@@ -30,7 +30,7 @@
 </div>
 
 <div align="center" style="margin: 20px 0;">
-  <a href="README.md">English</a> | <a href="README_CN.md">中文</a>
+  <a href="README.md">English</a> | <a href="README_CN.md">中文</a> | <a href="README_TH.md">ภาษาไทย</a>
 </div>
 
 <br>
@@ -91,11 +91,20 @@ A sophisticated multi-agent trading analysis system that combines technical indi
 
 ### Web Interface
 Modern Flask-based web application with:
-  - Real-time market data from Yahoo Finance
-  - Interactive asset selection (stocks, crypto, commodities, indices)
+  - Real-time market data from multiple sources (Yahoo Finance, MetaTrader 5, Binance, Bitkub)
+  - Interactive asset selection (stocks, crypto, forex, commodities)
+  - Customizable timescale analysis (Date Range vs specific Number of Bars)
   - Multiple timeframe analysis (1m to 1d)
-  - Dynamic chart generation
-  - API key management
+  - Dynamic chart generation and unified interface
+  - API key and source-specific asset management
+
+### 🤖 AI Trading Agents (MCP)
+The system includes **Model Context Protocol (MCP)** servers allowing external AI Agents or desktop apps to execute trades autonomously:
+- **`mcp_servers/mt5_trading_server.py`**: MT5 Trading (requires `mt5-bridge` server).
+- **`mcp_servers/binance_trading_server.py`**: Binance Spot & USDS-M Futures trading.
+- **`mcp_servers/bitkub_trading_server.py`**: Bitkub Spot trading (HMAC-SHA256 authenticated).
+
+These servers expose standardized tools for checking balances, retrieving active positions, and executing orders directly through Large Language Models.
 
 ## 📦 Installation
 
@@ -121,12 +130,12 @@ conda install -c conda-forge ta-lib
 
 Or visit the [TA-Lib Python repository](https://github.com/ta-lib/ta-lib-python) for detailed installation instructions.
 
-### 3. Set Up LLM API Key
-You can set it in our Web InterFace Later,
+### 3. Set Up LLM & Exchange API Keys
+You can set LLM keys in our Web Interface later,
 
 ![alt text](assets/apibox.png)
 
-Or set it as an environment variable:
+Or set them natively as environment variables (check `.env.sample` for all variables):
 ```bash
 # For OpenAI
 export OPENAI_API_KEY="your_openai_api_key_here"
@@ -134,8 +143,14 @@ export OPENAI_API_KEY="your_openai_api_key_here"
 # For Anthropic (Claude)
 export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
 
-# For Qwen (DashScope, based in Singapore — delays may occur)
+# For Qwen (DashScope)
 export DASHSCOPE_API_KEY="your_dashscope_api_key_here"
+
+# Exchange APIs (For MCP Trading or backend logic)
+export BINANCE_API_KEY="your_binance_key"
+export BINANCE_API_SECRET="your_binance_secret"
+export BITKUB_API_KEY="your_bitkub_key"
+export BITKUB_API_SECRET="your_bitkub_secret"
 
 ```
 
@@ -199,6 +214,28 @@ print(final_state.get("indicator_report"))
 print(final_state.get("pattern_report"))
 print(final_state.get("trend_report"))
 ```
+
+### Multi-Exchange CLI Analyzers
+
+You can also run the automated quantitative analysis directly from your terminal without starting the web server. We have integrated standalone CLI scripts for each data source that accept standard arguments for fetching OHLCV data using recent bars or exact date ranges.
+
+```bash
+# Binance Analyzer (Spot Market)
+python binance_analyze.py --symbol BTCUSDT --timeframe 1h --bars 100
+
+# Bitkub Analyzer (Thai Public API)
+python bitkub_analyze.py --symbol BTC_THB --timeframe 4h --start "2025-01-01" --end "2025-01-31"
+
+# MetaTrader 5 Analyzer (Requires running mt5-bridge)
+python mt5_analyze.py --symbol XAUUSD --timeframe 15m --bars 200 --output report.json
+```
+
+**Common CLI Arguments:**
+- `--symbol`: The ticker or pair symbol specific to the exchange (required).
+- `--timeframe`: The interval of the K-lines (e.g., `1m`, `15m`, `1h`, `1d`).
+- `--bars`: Number of most recent bars to fetch. Evaluated automatically if dates are ignored.
+- `--start` / `--end`: Fetch data using a specific date range (format `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`).
+- `--output`: Export the analysis report directly to a JSON file (optional).
 
 You can also adjust the default configuration to set your own choice of LLMs or analysis parameters in web_interface.py.
 
@@ -273,6 +310,9 @@ This repository was built with the help of the following libraries and framework
 - [**Anthropic (Claude)**](https://github.com/anthropics/anthropic-sdk-python)
 - [**Qwen**](https://github.com/QwenLM/Qwen)
 - [**yfinance**](https://github.com/ranaroussi/yfinance)
+- [**python-binance**](https://github.com/sammchardy/python-binance)
+- [**Bitkub Official API Docs**](https://github.com/bitkub/bitkub-official-api-docs)
+- [**MCP**](https://github.com/modelcontextprotocol/python-sdk)
 - [**Flask**](https://github.com/pallets/flask)
 - [**TechnicalAnalysisAutomation**](https://github.com/neurotrader888/TechnicalAnalysisAutomation/tree/main)
 - [**tvdatafeed**](https://github.com/rongardF/tvdatafeed)
