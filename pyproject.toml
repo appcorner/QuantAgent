@@ -15,6 +15,7 @@ dependencies = [
     "langchain-qwq>=0.3.4",
     "langgraph>=1.1.4",
     "matplotlib>=3.10.8",
+    "mcp[cli]>=1.27.0",
     "mplfinance>=0.12.10b0",
     "numpy>=2.4.4",
     "openai>=2.30.0",
