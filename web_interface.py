@@ -405,6 +405,18 @@ class WebTradingAnalyzer:
                             "forecast_horizon", "N/A"
                         ),
                         "justification": decision_data.get("justification", "N/A"),
+                        "confidence_level": decision_data.get(
+                            "confidence_level", "N/A"
+                        ),
+                        "confidence_score": decision_data.get(
+                            "confidence_score", "N/A"
+                        ),
+                        "should_enter_now": decision_data.get(
+                            "should_enter_now", "N/A"
+                        ),
+                        "entry_timing_reason": decision_data.get(
+                            "entry_timing_reason", "N/A"
+                        ),
                     }
                 else:
                     # If no JSON found, return the raw text
@@ -710,6 +722,10 @@ def output():
             "risk_reward_ratio": "1:2.5",
             "forecast_horizon": "24-48 hours",
             "justification": "Based on comprehensive analysis of technical indicators, pattern recognition, and trend analysis, the system recommends a LONG position on BTC. The analysis shows strong bullish momentum with key support levels holding, and multiple technical indicators confirming upward movement.",
+            "confidence_level": "High",
+            "confidence_score": 0.85,
+            "should_enter_now": True,
+            "entry_timing_reason": "The current consolidation pattern (bull flag) is showing signs of a potential breakout, and the momentum indicators are positive. Entering now allows for capturing the anticipated move while maintaining a favorable risk-reward ratio. Waiting for further confirmation may reduce the potential reward and increase the risk of missing the optimal entry point.",
         },
     }
 

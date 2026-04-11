@@ -84,6 +84,10 @@ def print_results(results: dict) -> None:
                 f"  Risk/Reward Ratio : {decision.get('risk_reward_ratio', 'N/A')}",
                 f"  Forecast Horizon  : {decision.get('forecast_horizon', 'N/A')}",
                 f"  Justification     : {decision.get('justification', 'N/A')}",
+                f"  Confidence Level  : {decision.get('confidence_level', 'N/A')}",
+                f"  Confidence Score  : {decision.get('confidence_score', 'N/A')}",
+                f"  Should Enter Now  : {decision.get('should_enter_now', 'N/A')}",
+                f"  Entry Timing      : {decision.get('entry_timing_reason', 'N/A')}",
             ]
             _section("📋 Final Decision", "\n".join(body_lines))
 
