@@ -290,6 +290,32 @@ print(final_state.get("trend_report"))
 
 You can also run the automated quantitative analysis directly from your terminal without starting the web server. We have integrated standalone CLI scripts for each data source that accept standard arguments for fetching OHLCV data using recent bars or exact date ranges.
 
+### Automatic Trading Runner
+
+QuantAgent now includes a config-driven automatic trading loop for multi-symbol execution.
+
+```bash
+# 1) Configure symbols, providers, timeframes, and order sizes
+#    in config.json
+
+# 2) Validate the configuration
+python auto_trader.py --validate-config
+
+# 3) Run one cycle only
+python auto_trader.py --once
+
+# 4) Run continuously and wait for the next timeframe automatically
+python auto_trader.py
+```
+
+The automatic runner will:
+- iterate through all enabled symbols in `config.json`
+- fetch OHLC data from the configured provider
+- run the full multi-agent analysis pipeline
+- check balances and existing positions before opening orders
+- store trade history and win/loss summaries in the `data/` folder
+- write the latest status report to `data/auto_trade_status.json`
+
 ```bash
 # Binance Analyzer (Spot Market)
 python binance_analyze.py --symbol BTCUSDT --timeframe 1h --bars 100

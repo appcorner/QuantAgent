@@ -10,3 +10,4 @@ read_files/
 app/
 .env
 report.json
+data/

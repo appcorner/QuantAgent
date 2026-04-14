@@ -1,0 +1,49 @@
+{
+  "dry_run": false,
+  "history_file": "data/auto_trade_history.csv",
+  "state_file": "data/auto_trade_state.json",
+  "status_file": "data/auto_trade_status.json",
+  "llm": {
+    "provider": "openai",
+    "agent_model": "gpt-5.4-mini",
+    "graph_model": "gpt-5.4-mini",
+    "temperature": 0.1
+  },
+  "risk": {
+    "default_bars": 120,
+    "min_confidence_score": 55,
+    "min_risk_reward_ratio": 1.2,
+    "allow_reentry_same_direction": false,
+    "close_on_opposite_signal": true,
+    "close_on_no_signal": false
+  },
+  "symbols": [
+    {
+      "enabled": false,
+      "provider": "binance",
+      "market_type": "futures",
+      "symbol": "BTCUSDT",
+      "timeframe": "1h",
+      "bars": 120,
+      "quote_amount": 5
+    },
+    {
+      "enabled": false,
+      "provider": "bitkub",
+      "market_type": "spot",
+      "symbol": "BTC_THB",
+      "timeframe": "4h",
+      "bars": 120,
+      "quote_amount": 50
+    },
+    {
+      "enabled": true,
+      "provider": "mt5",
+      "market_type": "forex",
+      "symbol": "XAUUSD",
+      "timeframe": "15m",
+      "bars": 150,
+      "lot": 0.01
+    }
+  ]
+}

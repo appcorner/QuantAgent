@@ -381,8 +381,10 @@ class WebTradingAnalyzer:
         final_decision_raw = final_state.get("final_trade_decision", "")
 
         # Extract chart data if available
-        pattern_chart = final_state.get("pattern_image", "")
-        trend_chart = final_state.get("trend_image", "")
+        # pattern_chart = final_state.get("pattern_image", "")
+        # trend_chart = final_state.get("trend_image", "")
+        pattern_chart = ""
+        trend_chart = ""
         pattern_image_filename = final_state.get("pattern_image_filename", "")
         trend_image_filename = final_state.get("trend_image_filename", "")
 
