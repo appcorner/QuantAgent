@@ -15,7 +15,13 @@
     "min_risk_reward_ratio": 1.2,
     "allow_reentry_same_direction": false,
     "close_on_opposite_signal": true,
-    "close_on_no_signal": false
+    "close_on_no_signal": false,
+    "use_auto_sl_tp": true,
+    "atr_period": 14,
+    "sl_atr_multiplier": 1.5,
+    "tp_atr_multiplier": 2.0,
+    "default_risk_reward_ratio": 1.5,
+    "min_stop_distance_pct": 0.001
   },
   "symbols": [
     {
@@ -41,7 +47,7 @@
       "provider": "mt5",
       "market_type": "forex",
       "symbol": "XAUUSD",
-      "timeframe": "15m",
+      "timeframe": "1h",
       "bars": 150,
       "lot": 0.01
     }

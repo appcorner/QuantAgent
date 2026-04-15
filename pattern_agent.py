@@ -179,6 +179,8 @@ def create_pattern_agent(tool_llm, graph_llm, toolkit):
 
         return {
             "messages": messages + [final_response],
+            "pattern_image": pattern_image_b64,
+            "pattern_image_filename": "pattern_chart.png",
             "pattern_report": final_response.content,
         }
 

@@ -29,6 +29,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 try:
     import requests
@@ -107,6 +108,53 @@ def parse_risk_reward(value: Any) -> float:
     return safe_float(nums[0], 0.0)
 
 
+def extract_order_identifiers(payload: Any) -> dict[str, Any]:
+    order_id = ""
+    ticket = ""
+    client_order_id = ""
+
+    def walk(value: Any) -> None:
+        nonlocal order_id, ticket, client_order_id
+        if isinstance(value, dict):
+            for key, item in value.items():
+                lower = str(key).strip().lower()
+                if item not in (None, "", [], {}):
+                    if not order_id and lower in {"orderid", "order_id", "id"} and not isinstance(item, (dict, list)):
+                        order_id = item
+                    elif not ticket and lower in {"ticket", "positionid", "position_id"} and not isinstance(item, (dict, list)):
+                        ticket = item
+                    elif not client_order_id and lower in {"clientorderid", "client_order_id"} and not isinstance(item, (dict, list)):
+                        client_order_id = item
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(payload)
+    return {
+        "order_id": order_id,
+        "ticket": ticket,
+        "client_order_id": client_order_id,
+    }
+
+
+def _coerce_ms_timestamp(value: Any) -> int:
+    text = str(value or "").strip()
+    if not text:
+        return 0
+    try:
+        number = float(text)
+    except ValueError:
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return 0
+        return int(parsed.timestamp() * 1000)
+    if number > 10_000_000_000:
+        return int(number)
+    return int(number * 1000)
+
+
 def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -124,6 +172,97 @@ def seconds_until_next_boundary(timeframe: str, now_ts: float | None = None) -> 
     remainder = int(now_ts) % tf_seconds
     wait = tf_seconds - remainder if remainder else tf_seconds
     return max(1, wait)
+
+
+def round_price(value: float, reference_price: float = 0.0) -> float:
+    ref = abs(reference_price or value or 0.0)
+    if ref >= 1000:
+        digits = 2
+    elif ref >= 100:
+        digits = 3
+    elif ref >= 1:
+        digits = 5
+    else:
+        digits = 8
+    return round(float(value), digits)
+
+
+def _series_to_floats(values: Any) -> list[float]:
+    if hasattr(values, "tolist"):
+        values = values.tolist()
+    return [safe_float(v, 0.0) for v in list(values)]
+
+
+def calculate_atr_from_ohlc(df: Any, period: int = 14) -> float:
+    if df is None:
+        return 0.0
+    try:
+        highs = _series_to_floats(df["High"])
+        lows = _series_to_floats(df["Low"])
+        closes = _series_to_floats(df["Close"])
+    except Exception:
+        return 0.0
+
+    if len(highs) < 2 or len(lows) < 2 or len(closes) < 2:
+        return 0.0
+
+    true_ranges: list[float] = []
+    for idx in range(1, min(len(highs), len(lows), len(closes))):
+        high = highs[idx]
+        low = lows[idx]
+        prev_close = closes[idx - 1]
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        true_ranges.append(max(0.0, tr))
+
+    if not true_ranges:
+        return 0.0
+
+    lookback = max(1, min(period, len(true_ranges)))
+    recent = true_ranges[-lookback:]
+    return sum(recent) / len(recent)
+
+
+def calculate_auto_sl_tp(
+    decision: str,
+    entry_price: float,
+    df: Any,
+    item: dict[str, Any],
+    risk_cfg: dict[str, Any],
+) -> tuple[float, float, float]:
+    manual_sl = safe_float(item.get("sl", item.get("stop_loss", 0.0)), 0.0)
+    manual_tp = safe_float(item.get("tp", item.get("take_profit", 0.0)), 0.0)
+    if manual_sl > 0 or manual_tp > 0:
+        return manual_sl, manual_tp, 0.0
+
+    use_auto = normalize_bool(item.get("auto_sl_tp", risk_cfg.get("use_auto_sl_tp", True)), True)
+    if not use_auto or entry_price <= 0:
+        return 0.0, 0.0, 0.0
+
+    atr_period = int(item.get("atr_period", risk_cfg.get("atr_period", 14)))
+    sl_mult = safe_float(item.get("sl_atr_multiplier", risk_cfg.get("sl_atr_multiplier", 1.5)), 1.5)
+    tp_mult = safe_float(item.get("tp_atr_multiplier", risk_cfg.get("tp_atr_multiplier", 2.0)), 2.0)
+    rr_ratio = safe_float(item.get("tp_risk_reward_ratio", risk_cfg.get("default_risk_reward_ratio", 1.5)), 1.5)
+    min_stop_pct = safe_float(item.get("min_stop_distance_pct", risk_cfg.get("min_stop_distance_pct", 0.001)), 0.001)
+
+    atr = calculate_atr_from_ohlc(df, period=atr_period)
+    fallback_distance = entry_price * min_stop_pct if min_stop_pct > 0 else 0.0
+    if atr <= 0:
+        atr = fallback_distance
+
+    sl_distance = max(atr * sl_mult, fallback_distance)
+    tp_distance = max(atr * tp_mult, sl_distance * rr_ratio)
+
+    decision = str(decision).upper()
+    if decision == "LONG":
+        sl = round_price(entry_price - sl_distance, entry_price)
+        tp = round_price(entry_price + tp_distance, entry_price)
+    elif decision == "SHORT":
+        sl = round_price(entry_price + sl_distance, entry_price)
+        tp = round_price(entry_price - tp_distance, entry_price)
+    else:
+        return 0.0, 0.0, atr
+
+    return sl, tp, atr
 
 
 class RuntimeStore:
@@ -166,8 +305,15 @@ class RuntimeStore:
             "status",
             "price",
             "quantity",
+            "sl",
+            "tp",
+            "atr",
             "confidence_score",
             "risk_reward_ratio",
+            "order_id",
+            "ticket",
+            "close_order_id",
+            "close_ticket",
             "outcome",
             "pnl",
             "dry_run",
@@ -205,6 +351,9 @@ class BaseExchangeAdapter:
 
     def close_position(self, item: dict[str, Any], existing_positions: list[dict[str, Any]], price: float) -> dict[str, Any]:
         raise NotImplementedError
+
+    def get_closed_trade_outcome(self, item: dict[str, Any], tracked_trade: dict[str, Any]) -> dict[str, Any]:
+        return {}
 
 
 class BinanceExchangeAdapter(BaseExchangeAdapter):
@@ -317,6 +466,62 @@ class BinanceExchangeAdapter(BaseExchangeAdapter):
         except Exception as exc:
             return {"status": "error", "reason": str(exc), "side": side, "quantity": quantity}
 
+    def get_closed_trade_outcome(self, item: dict[str, Any], tracked_trade: dict[str, Any]) -> dict[str, Any]:
+        symbol = str(item["symbol"]).upper()
+        market_type = str(item.get("market_type", "spot")).lower()
+        entry_price = safe_float(tracked_trade.get("entry_price"), 0.0)
+        quantity = safe_float(tracked_trade.get("quantity"), 0.0)
+        opened_at = str(tracked_trade.get("opened_at", "") or "")
+
+        opened_ms = 0
+        if opened_at:
+            try:
+                opened_ms = int(datetime.fromisoformat(opened_at).timestamp() * 1000)
+            except ValueError:
+                opened_ms = 0
+
+        try:
+            if market_type == "futures":
+                trades = self.trade_client.futures_account_trades(symbol=symbol, limit=50)
+                relevant = [t for t in trades if int(t.get("time", 0)) >= max(0, opened_ms - 1000)]
+                if not relevant:
+                    return {}
+                pnl = sum(safe_float(t.get("realizedPnl"), 0.0) for t in relevant)
+                close_price = safe_float(relevant[-1].get("price"), entry_price)
+                return {
+                    "close_price": close_price,
+                    "pnl": pnl,
+                    "outcome": "WIN" if pnl > 0 else "LOSS" if pnl < 0 else "BREAKEVEN",
+                    "order_id": tracked_trade.get("order_id"),
+                    "ticket": tracked_trade.get("ticket"),
+                    "reason": "Position closed on exchange; matched via Binance futures trade history.",
+                }
+
+            trades = self.trade_client.get_my_trades(symbol=symbol, limit=50)
+            relevant = [t for t in trades if int(t.get("time", 0)) >= max(0, opened_ms - 1000)]
+            if not relevant:
+                return {}
+
+            closing_trades = [t for t in relevant if not bool(t.get("isBuyer", True))]
+            if not closing_trades:
+                return {}
+
+            sold_qty = sum(safe_float(t.get("qty"), 0.0) for t in closing_trades)
+            proceeds = sum(safe_float(t.get("quoteQty"), 0.0) for t in closing_trades)
+            matched_qty = min(quantity, sold_qty) if quantity > 0 and sold_qty > 0 else sold_qty
+            pnl = proceeds - (entry_price * matched_qty) if matched_qty > 0 else 0.0
+            close_price = safe_float(closing_trades[-1].get("price"), entry_price)
+            return {
+                "close_price": close_price,
+                "pnl": pnl,
+                "outcome": "WIN" if pnl > 0 else "LOSS" if pnl < 0 else "BREAKEVEN",
+                "order_id": tracked_trade.get("order_id"),
+                "ticket": tracked_trade.get("ticket"),
+                "reason": "Position closed on exchange; matched via Binance spot trade history.",
+            }
+        except Exception:
+            return {}
+
     @staticmethod
     def _resolve_quantity(item: dict[str, Any], price: float) -> float:
         qty = safe_float(item.get("quantity"))
@@ -401,6 +606,100 @@ class BitkubExchangeAdapter(BaseExchangeAdapter):
         except Exception as exc:
             return {"status": "error", "reason": str(exc), "quantity": quantity, "side": "SELL"}
 
+    def get_closed_trade_outcome(self, item: dict[str, Any], tracked_trade: dict[str, Any]) -> dict[str, Any]:
+        symbol = str(item["symbol"]).upper()
+        entry_price = safe_float(tracked_trade.get("entry_price"), 0.0)
+        tracked_quantity = safe_float(tracked_trade.get("quantity"), 0.0)
+        opened_ms = _coerce_ms_timestamp(tracked_trade.get("opened_at"))
+
+        params = {
+            "sym": symbol,
+            "start": max(0, opened_ms - 1000),
+            "end": int(time.time() * 1000),
+            "lmt": 100,
+        }
+
+        try:
+            payload = self._signed_get("/api/v3/market/my-order-history", params)
+        except Exception:
+            return {}
+
+        orders = payload.get("result", []) if isinstance(payload, dict) else []
+        if not isinstance(orders, list) or not orders:
+            return {}
+
+        closing_orders = []
+        for order in orders:
+            if not isinstance(order, dict):
+                continue
+            if str(order.get("side", "")).lower() != "sell":
+                continue
+            closed_at = max(
+                _coerce_ms_timestamp(order.get("order_closed_at")),
+                _coerce_ms_timestamp(order.get("ts")),
+                _coerce_ms_timestamp(order.get("timestamp")),
+            )
+            if closed_at and closed_at < max(0, opened_ms - 1000):
+                continue
+            closing_orders.append(order)
+
+        if not closing_orders:
+            return {}
+
+        closing_orders.sort(
+            key=lambda order: max(
+                _coerce_ms_timestamp(order.get("order_closed_at")),
+                _coerce_ms_timestamp(order.get("ts")),
+                _coerce_ms_timestamp(order.get("timestamp")),
+            )
+        )
+
+        remaining_qty = tracked_quantity if tracked_quantity > 0 else float("inf")
+        matched_qty = 0.0
+        gross_proceeds = 0.0
+        total_fees = 0.0
+        total_credits = 0.0
+        last_used_order: dict[str, Any] | None = None
+
+        for order in closing_orders:
+            order_qty = safe_float(order.get("amount"), 0.0)
+            if order_qty <= 0:
+                continue
+            used_qty = order_qty if remaining_qty == float("inf") else min(order_qty, remaining_qty)
+            if used_qty <= 0:
+                continue
+
+            rate = safe_float(order.get("rate"), 0.0)
+            ratio = used_qty / order_qty if order_qty > 0 else 0.0
+            gross_proceeds += rate * used_qty
+            total_fees += safe_float(order.get("fee"), 0.0) * ratio
+            total_credits += safe_float(order.get("credit"), 0.0) * ratio
+            matched_qty += used_qty
+            last_used_order = order
+
+            if remaining_qty != float("inf"):
+                remaining_qty -= used_qty
+                if remaining_qty <= 1e-12:
+                    break
+
+        if matched_qty <= 0 or last_used_order is None:
+            return {}
+
+        net_proceeds = gross_proceeds - total_fees + total_credits
+        pnl = net_proceeds - (entry_price * matched_qty)
+        close_price = gross_proceeds / matched_qty if matched_qty > 0 else entry_price
+
+        return {
+            "close_price": close_price,
+            "pnl": pnl,
+            "outcome": "WIN" if pnl > 0 else "LOSS" if pnl < 0 else "BREAKEVEN",
+            "order_id": tracked_trade.get("order_id", ""),
+            "ticket": tracked_trade.get("ticket", ""),
+            "close_order_id": last_used_order.get("order_id", last_used_order.get("id", "")),
+            "close_ticket": last_used_order.get("txn_id", ""),
+            "reason": "Position closed on exchange; matched via Bitkub order history.",
+        }
+
     def _get_server_time(self) -> str:
         resp = requests.get(f"{BITKUB_BASE_URL}/api/v3/servertime", timeout=15)
         resp.raise_for_status()
@@ -423,6 +722,26 @@ class BitkubExchangeAdapter(BaseExchangeAdapter):
             "X-BTK-SIGN": self._sign(ts, "POST", path, body_str),
         }
         resp = requests.post(f"{BITKUB_BASE_URL}{path}", headers=headers, data=body_str, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, dict) and data.get("error") not in (0, None):
+            raise RuntimeError(f"Bitkub API error: {data}")
+        return data
+
+    def _signed_get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        if not self.api_key or not self.api_secret:
+            raise RuntimeError("BITKUB_API_KEY or BITKUB_API_SECRET is missing.")
+        query = urlencode(params or {})
+        full_path = f"{path}?{query}" if query else path
+        ts = self._get_server_time()
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "X-BTK-APIKEY": self.api_key,
+            "X-BTK-TIMESTAMP": ts,
+            "X-BTK-SIGN": self._sign(ts, "GET", full_path),
+        }
+        resp = requests.get(f"{BITKUB_BASE_URL}{path}", headers=headers, params=params, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, dict) and data.get("error") not in (0, None):
@@ -501,6 +820,7 @@ class MT5ExchangeAdapter(BaseExchangeAdapter):
             "comment": comment,
             "magic": magic,
         }
+        print(f"Placing MT5 order: {payload}")
         try:
             resp = requests.post(f"{self.base_url}/order", json=payload, timeout=self.timeout)
             resp.raise_for_status()
@@ -525,6 +845,67 @@ class MT5ExchangeAdapter(BaseExchangeAdapter):
         if any(r.get("status") == "closed" for r in results):
             return {"status": "success", "quantity": len(results), "side": "CLOSE", "result": results}
         return {"status": "error", "reason": "Failed to close MT5 position(s).", "result": results}
+
+    def get_closed_trade_outcome(self, item: dict[str, Any], tracked_trade: dict[str, Any]) -> dict[str, Any]:
+        position_ticket = tracked_trade.get("ticket")
+        if position_ticket in (None, ""):
+            return {}
+
+        try:
+            resp = requests.get(
+                f"{self.base_url}/history/deals",
+                params={"position": position_ticket},
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception:
+            return {}
+
+        if isinstance(payload, dict):
+            deals = payload.get("data") or payload.get("items") or payload.get("result") or []
+        elif isinstance(payload, list):
+            deals = payload
+        else:
+            deals = []
+
+        if not isinstance(deals, list) or not deals:
+            return {}
+
+        normalized_deals = [deal for deal in deals if isinstance(deal, dict)]
+        if len(normalized_deals) < 2:
+            return {}
+
+        normalized_deals.sort(
+            key=lambda deal: max(
+                _coerce_ms_timestamp(deal.get("time_msc")),
+                _coerce_ms_timestamp(deal.get("time")),
+                _coerce_ms_timestamp(deal.get("timestamp")),
+            )
+        )
+        close_deal = normalized_deals[-1]
+
+        profit = safe_float(close_deal.get("profit"), 0.0)
+        commission = safe_float(close_deal.get("commission"), 0.0)
+        swap = safe_float(close_deal.get("swap"), 0.0)
+        fee = safe_float(close_deal.get("fee"), 0.0)
+        pnl = profit + commission + swap + fee
+        close_price = safe_float(close_deal.get("price"), tracked_trade.get("entry_price", 0.0))
+
+        refs = extract_order_identifiers(close_deal)
+        close_ticket = refs.get("ticket") or close_deal.get("ticket") or close_deal.get("deal") or ""
+        close_order_id = refs.get("order_id") or close_deal.get("order") or close_deal.get("order_id") or ""
+
+        return {
+            "close_price": close_price,
+            "pnl": pnl,
+            "outcome": "WIN" if pnl > 0 else "LOSS" if pnl < 0 else "BREAKEVEN",
+            "order_id": tracked_trade.get("order_id", ""),
+            "ticket": tracked_trade.get("ticket", ""),
+            "close_order_id": close_order_id,
+            "close_ticket": close_ticket,
+            "reason": "Position closed on exchange; matched via MT5 history deals.",
+        }
 
 
 class AutoTradingEngine:
@@ -557,6 +938,12 @@ class AutoTradingEngine:
         data["risk"].setdefault("allow_reentry_same_direction", False)
         data["risk"].setdefault("close_on_opposite_signal", True)
         data["risk"].setdefault("close_on_no_signal", False)
+        data["risk"].setdefault("use_auto_sl_tp", True)
+        data["risk"].setdefault("atr_period", 14)
+        data["risk"].setdefault("sl_atr_multiplier", 1.5)
+        data["risk"].setdefault("tp_atr_multiplier", 2.0)
+        data["risk"].setdefault("default_risk_reward_ratio", 1.5)
+        data["risk"].setdefault("min_stop_distance_pct", 0.001)
         return data
 
     def validate_config(self) -> list[str]:
@@ -668,6 +1055,9 @@ class AutoTradingEngine:
             "status": "pending",
             "price": 0.0,
             "quantity": 0.0,
+            "sl": 0.0,
+            "tp": 0.0,
+            "atr": 0.0,
             "confidence_score": 0.0,
             "risk_reward_ratio": 0.0,
             "outcome": "",
@@ -680,8 +1070,6 @@ class AutoTradingEngine:
             adapter = self._get_adapter(provider)
             balance = adapter.get_balance_snapshot(item)
             live_positions = adapter.get_positions(item)
-            self._sync_open_trades_with_live_positions(item, live_positions, clear_missing=not dry_run)
-            existing_positions = self._effective_positions(item, live_positions)
 
             df = adapter.fetch_ohlc(symbol, timeframe, bars)
             if df is None or df.empty:
@@ -691,6 +1079,9 @@ class AutoTradingEngine:
 
             last_price = safe_float(df["Close"].iloc[-1], 0.0)
             event["price"] = last_price
+
+            self._sync_open_trades_with_live_positions(item, live_positions, adapter=adapter, last_price=last_price, clear_missing=not dry_run)
+            existing_positions = self._effective_positions(item, live_positions)
 
             analyzer = self._get_analyzer()
             results = analyzer.run_analysis(df, symbol, timeframe)
@@ -730,10 +1121,45 @@ class AutoTradingEngine:
                 return {**event, "balance": balance, "positions": existing_positions, "analysis": formatted}
 
             if existing_positions and current_side != decision and normalize_bool(self.config["risk"].get("close_on_opposite_signal"), True):
+                tracked_trade = self.state.setdefault("open_trades", {}).get(trade_key, {})
                 close_result = {"status": "dry_run", "reason": "Dry run close."} if dry_run else adapter.close_position(item, existing_positions, last_price)
-                self._close_tracked_trade(trade_key, last_price, f"Opposite signal: {decision}")
-                event.update({"event": "CLOSE", "action": "close", "status": close_result.get("status", "unknown"), "notes": close_result.get("reason", "Closed on opposite signal.")})
+                close_refs = extract_order_identifiers(close_result)
+                self._close_tracked_trade(
+                    trade_key,
+                    last_price,
+                    f"Opposite signal: {decision}",
+                    close_details={
+                        "close_order_id": close_refs.get("order_id", ""),
+                        "close_ticket": close_refs.get("ticket", ""),
+                        "reason": close_result.get("reason", "Closed on opposite signal."),
+                    },
+                )
+                event.update(
+                    {
+                        "event": "CLOSE",
+                        "action": "close",
+                        "status": close_result.get("status", "unknown"),
+                        "order_id": tracked_trade.get("order_id", ""),
+                        "ticket": tracked_trade.get("ticket", ""),
+                        "close_order_id": close_refs.get("order_id", ""),
+                        "close_ticket": close_refs.get("ticket", ""),
+                        "notes": close_result.get("reason", "Closed on opposite signal."),
+                    }
+                )
                 self.store.append_history(event)
+
+            risk_cfg = dict(self.config.get("risk", {}))
+            if risk_reward_ratio > 0:
+                risk_cfg["default_risk_reward_ratio"] = risk_reward_ratio
+            order_item = dict(item)
+            sl, tp, atr = calculate_auto_sl_tp(decision, last_price, df, order_item, risk_cfg)
+            event["sl"] = sl
+            event["tp"] = tp
+            event["atr"] = atr
+            if sl > 0:
+                order_item["sl"] = sl
+            if tp > 0:
+                order_item["tp"] = tp
 
             if not should_enter:
                 event.update({"status": "skipped", "action": "skip", "notes": "Decision advised not to enter now."})
@@ -741,16 +1167,19 @@ class AutoTradingEngine:
                 return {**event, "balance": balance, "positions": existing_positions, "analysis": formatted}
 
             if dry_run:
-                order_result = {"status": "dry_run", "quantity": self._preview_quantity(item, last_price), "side": "BUY" if decision == "LONG" else "SELL", "reason": "Dry run mode enabled."}
+                order_result = {"status": "dry_run", "quantity": self._preview_quantity(order_item, last_price), "side": "BUY" if decision == "LONG" else "SELL", "reason": "Dry run mode enabled."}
             else:
-                order_result = adapter.place_order(item, decision, last_price)
+                order_result = adapter.place_order(order_item, decision, last_price)
 
+            order_refs = extract_order_identifiers(order_result)
             event.update(
                 {
                     "event": "OPEN",
                     "action": "open",
                     "status": order_result.get("status", "unknown"),
                     "quantity": order_result.get("quantity", 0.0),
+                    "order_id": order_refs.get("order_id", ""),
+                    "ticket": order_refs.get("ticket", ""),
                     "notes": order_result.get("reason", "Order processed."),
                 }
             )
@@ -764,6 +1193,12 @@ class AutoTradingEngine:
                     "decision": decision,
                     "entry_price": last_price,
                     "quantity": order_result.get("quantity", 0.0),
+                    "sl": sl,
+                    "tp": tp,
+                    "atr": atr,
+                    "order_id": order_refs.get("order_id", ""),
+                    "ticket": order_refs.get("ticket", ""),
+                    "client_order_id": order_refs.get("client_order_id", ""),
                     "opened_at": now_iso(),
                 }
 
@@ -775,16 +1210,36 @@ class AutoTradingEngine:
             self.store.append_history(event)
             return {**event, "balance": balance, "positions": existing_positions}
 
-    def _close_tracked_trade(self, trade_key: str, close_price: float, reason: str) -> None:
+    def _close_tracked_trade(
+        self,
+        trade_key: str,
+        close_price: float,
+        reason: str,
+        close_details: dict[str, Any] | None = None,
+    ) -> None:
         trade = self.state.setdefault("open_trades", {}).pop(trade_key, None)
         if not trade:
             return
 
+        close_details = close_details or {}
         entry = safe_float(trade.get("entry_price"), 0.0)
         qty = safe_float(trade.get("quantity"), 0.0)
         decision = str(trade.get("decision", "LONG")).upper()
-        pnl = ((close_price - entry) * qty) if decision == "LONG" else ((entry - close_price) * qty)
-        outcome = "WIN" if pnl > 0 else "LOSS" if pnl < 0 else "BREAKEVEN"
+        close_price = safe_float(close_details.get("close_price"), close_price)
+
+        raw_pnl = close_details.get("pnl")
+        pnl: float | None
+        try:
+            pnl = None if raw_pnl in (None, "") else float(raw_pnl)
+        except (TypeError, ValueError):
+            pnl = None
+
+        if pnl is None:
+            pnl = ((close_price - entry) * qty) if decision == "LONG" else ((entry - close_price) * qty)
+
+        outcome = str(close_details.get("outcome", "")).upper().strip()
+        if outcome not in {"WIN", "LOSS", "BREAKEVEN"}:
+            outcome = "WIN" if pnl > 0 else "LOSS" if pnl < 0 else "BREAKEVEN"
 
         summary = self.state.setdefault("summary", {"wins": 0, "losses": 0, "breakeven": 0, "closed": 0})
         if outcome == "WIN":
@@ -808,12 +1263,16 @@ class AutoTradingEngine:
                 "status": "closed",
                 "price": close_price,
                 "quantity": qty,
+                "order_id": trade.get("order_id", close_details.get("order_id", "")),
+                "ticket": trade.get("ticket", close_details.get("ticket", "")),
+                "close_order_id": close_details.get("close_order_id", ""),
+                "close_ticket": close_details.get("close_ticket", ""),
                 "confidence_score": "",
                 "risk_reward_ratio": "",
                 "outcome": outcome,
                 "pnl": round(pnl, 6),
                 "dry_run": self.config.get("dry_run", True),
-                "notes": reason,
+                "notes": close_details.get("reason", reason),
             }
         )
 
@@ -821,14 +1280,29 @@ class AutoTradingEngine:
         self,
         item: dict[str, Any],
         live_positions: list[dict[str, Any]],
+        adapter: BaseExchangeAdapter | Any | None = None,
+        last_price: float = 0.0,
         clear_missing: bool = True,
     ) -> None:
         trade_key = self._trade_key(item)
         open_trades = self.state.setdefault("open_trades", {})
 
         if not live_positions:
-            if clear_missing:
-                open_trades.pop(trade_key, None)
+            tracked_trade = open_trades.get(trade_key)
+            if clear_missing and tracked_trade:
+                close_details = {}
+                if adapter is not None and hasattr(adapter, "get_closed_trade_outcome"):
+                    try:
+                        close_details = adapter.get_closed_trade_outcome(item, tracked_trade) or {}
+                    except Exception:
+                        close_details = {}
+                fallback_price = safe_float(close_details.get("close_price"), last_price or tracked_trade.get("entry_price", 0.0))
+                self._close_tracked_trade(
+                    trade_key,
+                    fallback_price,
+                    "Position no longer present on exchange.",
+                    close_details=close_details,
+                )
             return
 
         long_positions = [p for p in live_positions if str(p.get("side", "")).upper() == "LONG"]
@@ -838,7 +1312,11 @@ class AutoTradingEngine:
         short_qty = sum(safe_float(p.get("quantity"), 0.0) for p in short_positions)
 
         if long_qty == short_qty:
-            open_trades.pop(trade_key, None)
+            tracked_trade = open_trades.get(trade_key)
+            if clear_missing and tracked_trade:
+                self._close_tracked_trade(trade_key, last_price or tracked_trade.get("entry_price", 0.0), "Net position is flat on exchange.")
+            else:
+                open_trades.pop(trade_key, None)
             return
 
         dominant_positions = long_positions if long_qty > short_qty else short_positions
@@ -853,6 +1331,8 @@ class AutoTradingEngine:
         entry_price = (weighted_notional / weighted_qty) if weighted_qty > 0 else 0.0
 
         existing = open_trades.get(trade_key, {})
+        dominant_raw = dominant_positions[0].get("raw", {}) if dominant_positions else {}
+        live_refs = extract_order_identifiers(dominant_raw)
         open_trades[trade_key] = {
             "provider": item.get("provider"),
             "symbol": item.get("symbol"),
@@ -861,6 +1341,9 @@ class AutoTradingEngine:
             "decision": decision,
             "entry_price": entry_price,
             "quantity": quantity,
+            "order_id": existing.get("order_id") or live_refs.get("order_id", ""),
+            "ticket": existing.get("ticket") or live_refs.get("ticket", ""),
+            "client_order_id": existing.get("client_order_id", "") or live_refs.get("client_order_id", ""),
             "opened_at": existing.get("opened_at", now_iso()),
             "source": "live_sync",
         }
