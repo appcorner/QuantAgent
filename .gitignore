@@ -11,3 +11,7 @@ app/
 .env
 report.json
 data/
+build/
+dist/
+*.spec
+*.mmd
