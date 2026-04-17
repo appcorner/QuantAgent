@@ -1451,3 +1451,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+#build command for PyInstaller:
+#uv run pyinstaller --onefile --clean --hidden-import dotenv --hidden-import binance.client --hidden-import binance_data --hidden-import bitkub_data --hidden-import mt5_data --collect-all talib --name "auto-trader" auto_trader.py

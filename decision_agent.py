@@ -4,35 +4,74 @@ Combines indicator, pattern, and trend reports to issue a LONG or SHORT order.
 """
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 
-BASE_DIR = Path(__file__).resolve().parent
-ENV_FILE = BASE_DIR / ".env"
-DEFAULT_DECISION_PROMPT_FILE = BASE_DIR / "decision_agent_prompt_default.md"
+SOURCE_BASE_DIR = Path(__file__).resolve().parent
+RUNTIME_BASE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else SOURCE_BASE_DIR
+DEFAULT_DECISION_PROMPT_NAME = "decision_agent_prompt_default.md"
 
-load_dotenv(ENV_FILE)
+
+def _candidate_base_dirs() -> list[Path]:
+    candidates = [RUNTIME_BASE_DIR, Path.cwd(), SOURCE_BASE_DIR]
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for path in candidates:
+        resolved = path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(resolved)
+    return unique
+
+
+def _load_env_files() -> None:
+    for base_dir in _candidate_base_dirs():
+        env_file = base_dir / ".env"
+        if env_file.exists():
+            load_dotenv(env_file)
+
+
+def _resolve_relative_path(path_text: str) -> Path:
+    raw_path = Path(path_text)
+    if raw_path.is_absolute():
+        return raw_path
+
+    for base_dir in _candidate_base_dirs():
+        candidate = base_dir / raw_path
+        if candidate.exists():
+            return candidate
+
+    return RUNTIME_BASE_DIR / raw_path
+
+
+def _default_prompt_path() -> Path:
+    return _resolve_relative_path(DEFAULT_DECISION_PROMPT_NAME)
+
+
+_load_env_files()
 
 
 def _read_decision_prompt_template() -> str:
     configured_prompt_file = os.environ.get("DECISION_AGENT_PROMPT", "").strip()
 
     if configured_prompt_file:
-        prompt_path = Path(configured_prompt_file)
-        if not prompt_path.is_absolute():
-            prompt_path = BASE_DIR / prompt_path
+        prompt_path = _resolve_relative_path(configured_prompt_file)
     else:
-        prompt_path = DEFAULT_DECISION_PROMPT_FILE
+        prompt_path = _default_prompt_path()
+
+    default_prompt_path = _default_prompt_path()
 
     print(f"Using decision prompt template: {prompt_path}")
 
     if prompt_path.exists():
         return prompt_path.read_text(encoding="utf-8")
 
-    if DEFAULT_DECISION_PROMPT_FILE.exists():
-        return DEFAULT_DECISION_PROMPT_FILE.read_text(encoding="utf-8")
+    if default_prompt_path.exists():
+        return default_prompt_path.read_text(encoding="utf-8")
 
     return (
         "You are a high-frequency quantitative trading (HFT) analyst operating on the current "
