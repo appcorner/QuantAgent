@@ -47,7 +47,16 @@
       "provider": "mt5",
       "market_type": "forex",
       "symbol": "XAUUSD",
-      "timeframe": "1h",
+      "timeframe": "30m",
+      "bars": 150,
+      "lot": 0.01
+    },
+    {
+      "enabled": true,
+      "provider": "mt5",
+      "market_type": "forex",
+      "symbol": "BTCUSD",
+      "timeframe": "30m",
       "bars": 150,
       "lot": 0.01
     }

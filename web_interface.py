@@ -678,6 +678,13 @@ class WebTradingAnalyzer:
 analyzer = WebTradingAnalyzer()
 
 
+def _build_mt5_fetch_error(client: MT5BridgeClient, symbol: str, timeframe: str) -> str:
+    """Return a user-facing MT5 fetch error that preserves the root cause when available."""
+    if client.last_error:
+        return f"Cannot fetch MT5 data for {symbol} ({timeframe}): {client.last_error}."
+    return f"No data returned from MT5 for {symbol} ({timeframe})."
+
+
 @app.route("/")
 def index():
     """Main landing page - redirect to demo."""
@@ -897,7 +904,7 @@ def analyze_mt5():
             df = client.fetch_ohlc(symbol, timeframe, count=bars)
 
         if df.empty:
-            return jsonify({"error": f"No data returned from MT5 for {symbol} ({timeframe})."})
+            return jsonify({"error": _build_mt5_fetch_error(client, symbol, timeframe)})
 
         # Run the same analysis pipeline as /api/analyze
         results = analyzer.run_analysis(df, symbol, timeframe)

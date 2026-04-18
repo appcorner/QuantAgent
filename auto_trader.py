@@ -1413,40 +1413,44 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
-    engine = AutoTradingEngine(config_path=args.config)
+    try:
+        engine = AutoTradingEngine(config_path=args.config)
 
-    if args.validate_config:
+        if args.validate_config:
+            errors = engine.validate_config()
+            if errors:
+                print("Config validation failed:")
+                for err in errors:
+                    print(f"- {err}")
+                return 1
+            print("Config validation passed.")
+            return 0
+
+        if args.show_status:
+            status_path = Path(engine.config.get("status_file", "data/auto_trade_status.json"))
+            if not status_path.exists():
+                print("No status report found yet.")
+                return 0
+            print(status_path.read_text(encoding="utf-8"))
+            return 0
+
         errors = engine.validate_config()
         if errors:
             print("Config validation failed:")
             for err in errors:
                 print(f"- {err}")
             return 1
-        print("Config validation passed.")
-        return 0
 
-    if args.show_status:
-        status_path = Path(engine.config.get("status_file", "data/auto_trade_status.json"))
-        if not status_path.exists():
-            print("No status report found yet.")
+        if args.once:
+            status = engine.run_once()
+            print(json.dumps(status, indent=2, ensure_ascii=False, default=str))
             return 0
-        print(status_path.read_text(encoding="utf-8"))
+
+        engine.run_forever()
         return 0
-
-    errors = engine.validate_config()
-    if errors:
-        print("Config validation failed:")
-        for err in errors:
-            print(f"- {err}")
-        return 1
-
-    if args.once:
-        status = engine.run_once()
-        print(json.dumps(status, indent=2, ensure_ascii=False, default=str))
-        return 0
-
-    engine.run_forever()
-    return 0
+    except KeyboardInterrupt:
+        print("Stopped by user.")
+        return 130
 
 
 if __name__ == "__main__":

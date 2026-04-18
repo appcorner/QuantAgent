@@ -12,8 +12,8 @@ be passed directly to WebTradingAnalyzer.run_analysis().
 """
 
 import os
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional
 
 import pandas as pd
 import requests
@@ -46,7 +46,12 @@ class MT5BridgeClient:
         "1mo": "MN1",
     }
 
-    def __init__(self, base_url: Optional[str] = None, timeout: float = 30.0):
+    def __init__(
+        self,
+        base_url: Optional[str] = None,
+        timeout: float = 30.0,
+        max_tick_age: Optional[timedelta] = None,
+    ):
         """
         Initialize the MT5 Bridge client.
 
@@ -54,11 +59,20 @@ class MT5BridgeClient:
             base_url: URL of the mt5-bridge server.
                       Falls back to env var MT5_BRIDGE_URL, then http://localhost:8000.
             timeout: HTTP request timeout in seconds.
+            max_tick_age: Maximum accepted age for the latest tick before
+                          treating the symbol as outside trading hours.
+                          Falls back to env var MT5_TICK_MAX_AGE_SECONDS,
+                          then 900 seconds.
         """
         if base_url is None:
             base_url = os.environ.get("MT5_BRIDGE_URL", "http://localhost:8000")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.last_error: Optional[str] = None
+        if max_tick_age is None:
+            max_tick_age_seconds = int(os.environ.get("MT5_TICK_MAX_AGE_SECONDS", "900"))
+            max_tick_age = timedelta(seconds=max_tick_age_seconds)
+        self.max_tick_age = max_tick_age
 
     # ------------------------------------------------------------------
     # Public API
@@ -72,6 +86,47 @@ class MT5BridgeClient:
             return resp.json()
         except requests.RequestException as e:
             return {"status": "error", "detail": str(e)}
+
+    def get_tick(self, symbol: str) -> Optional[dict[str, Any]]:
+        """Fetch the latest tick for a symbol from mt5-bridge."""
+        try:
+            resp = requests.get(f"{self.base_url}/tick/{symbol}", timeout=self.timeout)
+            resp.raise_for_status()
+            tick = resp.json()
+            if isinstance(tick, dict):
+                return tick
+            print(f"Error fetching tick for {symbol}: unexpected response format")
+            return None
+        except requests.RequestException as e:
+            print(f"Error fetching tick for {symbol}: {e}")
+            return None
+
+    def is_symbol_tradeable(self, symbol: str) -> tuple[bool, str]:
+        """Check that a symbol has a fresh, usable tick before requesting OHLC."""
+        tick = self.get_tick(symbol)
+        if not tick:
+            return False, f"tick not available for {symbol}"
+
+        if not self._has_valid_tick_prices(tick):
+            return False, f"symbol {symbol} has no valid bid/ask/last prices"
+
+        tick_time = tick.get("time")
+        if tick_time is None:
+            return False, f"tick timestamp missing for {symbol}"
+
+        try:
+            tick_dt = datetime.fromtimestamp(int(tick_time), tz=timezone.utc)
+        except (TypeError, ValueError, OSError):
+            return False, f"invalid tick timestamp for {symbol}: {tick_time}"
+
+        tick_age = datetime.now(timezone.utc) - tick_dt
+        if tick_age > self.max_tick_age:
+            return False, (
+                f"symbol {symbol} appears outside trading hours "
+                f"(latest tick age: {tick_age})"
+            )
+
+        return True, "ok"
 
     def fetch_ohlc(
         self,
@@ -91,9 +146,17 @@ class MT5BridgeClient:
             pd.DataFrame with columns [Datetime, Open, High, Low, Close].
             Empty DataFrame on error.
         """
+        self.last_error = None
         mt5_tf = self._resolve_timeframe(timeframe)
         if mt5_tf is None:
-            print(f"Error: unsupported timeframe '{timeframe}'")
+            self.last_error = f"unsupported timeframe '{timeframe}'"
+            print(f"Error: {self.last_error}")
+            return pd.DataFrame()
+
+        tradeable, detail = self.is_symbol_tradeable(symbol)
+        if not tradeable:
+            self.last_error = detail
+            print(f"Error fetching OHLC for {symbol}: {detail}")
             return pd.DataFrame()
 
         try:
@@ -104,8 +167,12 @@ class MT5BridgeClient:
             )
             resp.raise_for_status()
             rates = resp.json()
-            return self._rates_to_dataframe(rates)
+            df = self._rates_to_dataframe(rates)
+            if df.empty:
+                self.last_error = f"mt5-bridge returned no OHLC data for {symbol} ({timeframe})"
+            return df
         except requests.RequestException as e:
+            self.last_error = str(e)
             print(f"Error fetching OHLC for {symbol}: {e}")
             return pd.DataFrame()
 
@@ -129,9 +196,17 @@ class MT5BridgeClient:
             pd.DataFrame with columns [Datetime, Open, High, Low, Close].
             Empty DataFrame on error.
         """
+        self.last_error = None
         mt5_tf = self._resolve_timeframe(timeframe)
         if mt5_tf is None:
-            print(f"Error: unsupported timeframe '{timeframe}'")
+            self.last_error = f"unsupported timeframe '{timeframe}'"
+            print(f"Error: {self.last_error}")
+            return pd.DataFrame()
+
+        tradeable, detail = self.is_symbol_tradeable(symbol)
+        if not tradeable:
+            self.last_error = detail
+            print(f"Error fetching OHLC range for {symbol}: {detail}")
             return pd.DataFrame()
 
         # Convert to unix timestamps (mt5-bridge accepts int or ISO string)
@@ -150,8 +225,12 @@ class MT5BridgeClient:
             )
             resp.raise_for_status()
             rates = resp.json()
-            return self._rates_to_dataframe(rates)
+            df = self._rates_to_dataframe(rates)
+            if df.empty:
+                self.last_error = f"mt5-bridge returned no OHLC data for {symbol} ({timeframe})"
+            return df
         except requests.RequestException as e:
+            self.last_error = str(e)
             print(f"Error fetching OHLC range for {symbol}: {e}")
             return pd.DataFrame()
 
@@ -162,6 +241,15 @@ class MT5BridgeClient:
     def _resolve_timeframe(self, timeframe: str) -> Optional[str]:
         """Convert QuantAgent timeframe to mt5-bridge timeframe string."""
         return self.TIMEFRAME_MAP.get(timeframe.lower())
+
+    @staticmethod
+    def _has_valid_tick_prices(tick: dict[str, Any]) -> bool:
+        """A tradeable symbol should expose at least one positive price field."""
+        for field in ("bid", "ask", "last"):
+            price = tick.get(field)
+            if isinstance(price, (int, float)) and price > 0:
+                return True
+        return False
 
     @staticmethod
     def _to_unix(dt: datetime) -> int:

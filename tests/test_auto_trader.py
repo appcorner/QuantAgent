@@ -1,10 +1,11 @@
 import json
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from auto_trader import AutoTradingEngine, BitkubExchangeAdapter, MT5ExchangeAdapter, calculate_auto_sl_tp, parse_risk_reward, timeframe_to_seconds
+from auto_trader import AutoTradingEngine, BitkubExchangeAdapter, MT5ExchangeAdapter, calculate_auto_sl_tp, main, parse_risk_reward, timeframe_to_seconds
 
 
 class AutoTraderTests(unittest.TestCase):
@@ -323,6 +324,26 @@ class AutoTraderTests(unittest.TestCase):
         self.assertAlmostEqual(result["close_price"], 116000.0)
         self.assertAlmostEqual(result["pnl"], 158.0)
         self.assertEqual(result["outcome"], "WIN")
+
+    def test_main_handles_ctrl_c_without_traceback(self):
+        parser = Mock()
+        parser.parse_args.return_value = Namespace(
+            config="config.json",
+            once=False,
+            validate_config=False,
+            show_status=False,
+        )
+        engine = Mock()
+        engine.validate_config.return_value = []
+        engine.run_forever.side_effect = KeyboardInterrupt
+
+        with patch("auto_trader.build_parser", return_value=parser), patch(
+            "auto_trader.AutoTradingEngine", return_value=engine
+        ), patch("builtins.print") as mock_print:
+            exit_code = main()
+
+        self.assertEqual(exit_code, 130)
+        mock_print.assert_any_call("Stopped by user.")
 
 
 if __name__ == "__main__":
