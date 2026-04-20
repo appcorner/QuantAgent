@@ -773,7 +773,7 @@ class MT5ExchangeAdapter(BaseExchangeAdapter):
             return {"error": str(exc)}
 
     def get_positions(self, item: dict[str, Any]) -> list[dict[str, Any]]:
-        symbol = str(item["symbol"]).upper()
+        symbol = str(item["symbol"])
         try:
             resp = requests.get(f"{self.base_url}/positions", params={"symbols": symbol}, timeout=self.timeout)
             resp.raise_for_status()
@@ -800,7 +800,7 @@ class MT5ExchangeAdapter(BaseExchangeAdapter):
             return []
 
     def place_order(self, item: dict[str, Any], decision: str, price: float) -> dict[str, Any]:
-        symbol = str(item["symbol"]).upper()
+        symbol = str(item["symbol"])
         volume = safe_float(item.get("lot") or item.get("volume"), 0.0)
         if volume <= 0:
             return {"status": "skipped", "reason": "Set lot or volume in config for MT5 orders."}
