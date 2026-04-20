@@ -183,7 +183,7 @@ def main() -> None:
     print(f"{GREEN}✅ Connected (MT5 connected: {health.get('mt5_connected', '?')}){RESET}")
 
     # ── 2. Fetch OHLC data ────────────────────────────────────────────
-    symbol = args.symbol.upper()
+    symbol = args.symbol
     timeframe = args.timeframe
 
     if args.start and args.end:

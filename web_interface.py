@@ -858,7 +858,7 @@ def analyze_mt5():
     """
     try:
         data = request.get_json()
-        symbol = (data.get("symbol") or data.get("asset", "")).strip().upper()
+        symbol = (data.get("symbol") or data.get("asset", "")).strip()
         timeframe = data.get("timeframe", "1h")
         bars = data.get("bars", 100)
         mt5_url = data.get("mt5_url")  # None → falls back to env / default

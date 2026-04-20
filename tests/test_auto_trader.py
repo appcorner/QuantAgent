@@ -213,6 +213,28 @@ class AutoTraderTests(unittest.TestCase):
         self.assertEqual(payload["magic"], 123456)
         self.assertNotIn("side", payload)
 
+    def test_mt5_place_order_preserves_symbol_case(self):
+        adapter = MT5ExchangeAdapter.__new__(MT5ExchangeAdapter)
+        adapter.base_url = "http://127.0.0.1:8000"
+        adapter.timeout = 5
+
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"ok": True}
+
+        with patch("auto_trader.requests.post", return_value=response) as mock_post:
+            adapter.place_order(
+                {
+                    "symbol": "XAUUSD.s",
+                    "lot": 0.01,
+                },
+                "LONG",
+                4765.6,
+            )
+
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["symbol"], "XAUUSD.s")
+
     def test_mt5_get_closed_trade_outcome_uses_history_deals(self):
         adapter = MT5ExchangeAdapter.__new__(MT5ExchangeAdapter)
         adapter.base_url = "http://127.0.0.1:8000"

@@ -126,7 +126,7 @@ def mt5_place_order(
             return error_response(f"Invalid side '{side}'. Must be BUY or SELL.")
 
         payload: dict = {
-            "symbol": symbol.upper(),
+            "symbol": symbol,
             "side": side,
             "volume": volume,
         }
@@ -202,7 +202,7 @@ def mt5_close_all(symbol: str = "") -> str:
     try:
         params = {}
         if symbol:
-            params["symbols"] = symbol.upper()
+            params["symbols"] = symbol
 
         positions = _get("/positions", params=params)
         if not positions:
