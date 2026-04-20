@@ -58,7 +58,7 @@
       "symbol": "BTCUSD",
       "timeframe": "30m",
       "bars": 150,
-      "lot": 0.01
+      "lot": 0.10
     }
   ]
 }
