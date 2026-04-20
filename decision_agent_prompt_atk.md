@@ -47,11 +47,17 @@ Base your decision on the combined strength, alignment, and timing of the follow
 - Default to the **dominant trendline slope** (e.g., SHORT in descending channel).
 - Do not guess direction — choose the **more defensible** side.
 6. Suggest a reasonable **risk-reward ratio** between **1.2 and 1.8**, based on current volatility and trend strength.
-7. Extent task:
-- Use stronger weight for aligned momentum, moving-average structure, breakout/breakdown context, volatility, and volume confirmation.
-- Write forecast_horizon, justification, and entry_timing_reason in Thai language.
-- Return confidence_score from 0 to 100 and confidence_level as HIGH, MEDIUM, or LOW.
-- Risk/reward ratio must be between 1.2 and 1.8.
+7. Entry timing assessment:
+- Evaluate **directional bias** and **entry timing** separately. A valid LONG or SHORT bias does **not** automatically mean the order should be opened immediately.
+- Set **should_enter_now = true** only when the signal is confirmed **and** the current entry location is still efficient, such as:
+- A breakout/breakdown is already confirmed with momentum or volume support, or
+- Price is reacting cleanly from support/resistance with a fresh rejection, bounce, or retest confirmation.
+- Set **should_enter_now = false** when direction is clear but the timing is poor, such as:
+- Price is already overextended after a large impulse candle,
+- Price is entering directly into nearby support/resistance,
+- The market is still inside noisy consolidation or an unconfirmed squeeze,
+- Volume, momentum, or candle confirmation is still weak or late.
+- **entry_timing_reason** must focus specifically on timing quality, not just direction. Explain in Thai whether the order should be opened now, and if not, state the exact condition that should be awaited first (for example: breakout close, pullback retest, reclaim/loss of a key level, stronger momentum/volume confirmation).
 
 ---
 ### 🧠 Output Format in json(for system parsing):
@@ -64,7 +70,7 @@ Base your decision on the combined strength, alignment, and timing of the follow
 "should_enter_now": "<boolean true or false>",
 "confidence_score": "<float between 0.0 and 100.0>",
 "confidence_level": "<HIGH or MEDIUM or LOW>",
-"entry_timing_reason": "<...>",
+"entry_timing_reason": "<Thai explanation of whether entry should be opened now, or what confirmation should be awaited first>",
 "risk_reward_ratio": "<float between 1.2 and 1.8>",
 }}
 
