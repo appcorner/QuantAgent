@@ -10,6 +10,7 @@ import pandas as pd
 import talib
 from langchain_core.tools import tool
 
+from analysis_artifacts import get_analysis_artifact_paths
 import color_style as color
 
 matplotlib.use("Agg")
@@ -156,7 +157,11 @@ class TechnicalTools:
         kline_data: Annotated[
             dict,
             "Dictionary containing OHLCV data with keys 'Datetime', 'Open', 'High', 'Low', 'Close'.",
-        ]
+        ],
+        symbol: Annotated[
+            str | None,
+            "Symbol used to choose the output folder under data/{symbol}.",
+        ] = None,
     ) -> dict:
         """
         Generate a candlestick chart with trendlines from OHLCV data,
@@ -165,6 +170,7 @@ class TechnicalTools:
         Returns:
             dict: base64 image and description
         """
+        artifact_paths = get_analysis_artifact_paths(symbol)
         data = pd.DataFrame(kline_data)
         candles = data.iloc[-50:].copy()
 
@@ -231,7 +237,7 @@ class TechnicalTools:
 
         # save fig locally
         fig.savefig(
-            "trend_graph.png",
+            artifact_paths["trend_png"],
             format="png",
             dpi=600,
             bbox_inches="tight",
@@ -251,6 +257,7 @@ class TechnicalTools:
 
         return {
             "trend_image": img_b64,
+            "trend_image_filename": str(artifact_paths["trend_png"]),
             "trend_image_description": "Trend-enhanced candlestick chart with support/resistance lines.",
         }
 
@@ -261,6 +268,10 @@ class TechnicalTools:
             dict,
             "Dictionary containing OHLCV data with keys 'Datetime', 'Open', 'High', 'Low', 'Close'.",
         ],
+        symbol: Annotated[
+            str | None,
+            "Symbol used to choose the output folder under data/{symbol}.",
+        ] = None,
     ) -> dict:
         """
         Generate a candlestick (K-line) chart from OHLCV data, save it locally, and return a base64-encoded image.
@@ -277,7 +288,13 @@ class TechnicalTools:
         # take recent 40
         df = df.tail(40)
 
-        df.to_csv("record.csv", index=False, date_format="%Y-%m-%d %H:%M:%S")
+        artifact_paths = get_analysis_artifact_paths(symbol)
+
+        df.to_csv(
+            artifact_paths["record_csv"],
+            index=False,
+            date_format="%Y-%m-%d %H:%M:%S",
+        )
         try:
             # df.index = pd.to_datetime(df["Datetime"])
             df.index = pd.to_datetime(df["Datetime"], format="%Y-%m-%d %H:%M:%S")
@@ -298,7 +315,7 @@ class TechnicalTools:
         axlist[0].set_xlabel("Datetime", fontweight="normal")
 
         fig.savefig(
-            fname="kline_chart.png",
+            fname=artifact_paths["kline_png"],
             dpi=600,
             bbox_inches="tight",
             pad_inches=0.1,
@@ -314,6 +331,8 @@ class TechnicalTools:
 
         return {
             "pattern_image": img_b64,
+            "pattern_image_filename": str(artifact_paths["kline_png"]),
+            "record_file": str(artifact_paths["record_csv"]),
             "pattern_image_description": "Candlestick chart saved locally and returned as base64 string.",
         }
 

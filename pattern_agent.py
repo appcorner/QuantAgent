@@ -33,6 +33,7 @@ def create_pattern_agent(tool_llm, graph_llm, toolkit):
         # --- Tool and pattern definitions ---
         tools = [toolkit.generate_kline_image]
         time_frame = state["time_frame"]
+        artifact_symbol = state.get("artifact_symbol", state.get("stock_name"))
         pattern_text = """
         Please refer to the following classic candlestick patterns:
 
@@ -56,6 +57,7 @@ def create_pattern_agent(tool_llm, graph_llm, toolkit):
 
         # --- Check for precomputed image in state ---
         pattern_image_b64 = state.get("pattern_image")
+        pattern_image_filename = state.get("pattern_image_filename", "")
 
         # --- Retry wrapper for LLM invocation ---
         def invoke_with_retry(call_fn, *args, retries=3, wait_sec=8):
@@ -109,9 +111,11 @@ def create_pattern_agent(tool_llm, graph_llm, toolkit):
                     tool_args = call["args"]
                     # Always provide kline_data
                     tool_args["kline_data"] = copy.deepcopy(state["kline_data"])
+                    tool_args["symbol"] = artifact_symbol
                     tool_fn = next(t for t in tools if t.name == tool_name)
                     tool_result = invoke_tool_with_retry(tool_fn, tool_args)
                     pattern_image_b64 = tool_result.get("pattern_image")
+                    pattern_image_filename = tool_result.get("pattern_image_filename", "")
                     messages.append(
                         ToolMessage(
                             tool_call_id=call["id"], content=json.dumps(tool_result)
@@ -180,7 +184,7 @@ def create_pattern_agent(tool_llm, graph_llm, toolkit):
         return {
             "messages": messages + [final_response],
             "pattern_image": pattern_image_b64,
-            "pattern_image_filename": "pattern_chart.png",
+            "pattern_image_filename": pattern_image_filename,
             "pattern_report": final_response.content,
         }
 

@@ -290,6 +290,8 @@ print(final_state.get("trend_report"))
 
 You can also run the automated quantitative analysis directly from your terminal without starting the web server. We have integrated standalone CLI scripts for each data source that accept standard arguments for fetching OHLCV data using recent bars or exact date ranges.
 
+During analysis, generated chart images and intermediate CSV artifacts are stored under `data/{symbol}/`.
+
 ### Automatic Trading Runner
 
 QuantAgent now includes a config-driven automatic trading loop for multi-symbol execution.

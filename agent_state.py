@@ -9,6 +9,7 @@ class IndicatorAgentState(TypedDict):
     kline_data: Annotated[
         dict, "OHLCV dictionary used for computing technical indicators"
     ]
+    artifact_symbol: Annotated[str, "Symbol used for saving analysis artifacts"]
     time_frame: Annotated[str, "time period for k line data provided"]
     stock_name: Annotated[dict, "stock name for prompt"]
 

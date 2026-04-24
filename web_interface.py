@@ -82,6 +82,10 @@ class WebTradingAnalyzer:
         # Load persisted custom assets
         self.custom_assets_file = self.data_dir / "custom_assets.json"
         self.custom_assets = self.load_custom_assets()
+        self.latest_analysis_artifacts = {
+            "pattern": None,
+            "trend": None,
+        }
 
     def fetch_yfinance_data(
         self, symbol: str, interval: str, start_date: str, end_date: str
@@ -240,7 +244,11 @@ class WebTradingAnalyzer:
         return sorted(files)
 
     def run_analysis(
-        self, df: pd.DataFrame, asset_name: str, timeframe: str
+        self,
+        df: pd.DataFrame,
+        asset_name: str,
+        timeframe: str,
+        artifact_symbol: str | None = None,
     ) -> Dict[str, Any]:
         """Run the trading analysis on the provided DataFrame."""
         try:
@@ -248,6 +256,8 @@ class WebTradingAnalyzer:
             print(f"DataFrame columns: {df.columns}")
             print(f"DataFrame index: {type(df.index)}")
             print(f"DataFrame shape: {df.shape}")
+
+            artifact_symbol = artifact_symbol or asset_name
 
             # Prepare data for analysis
             # if len(df) > 49:
@@ -300,18 +310,26 @@ class WebTradingAnalyzer:
             elif timeframe == "1mo":
                 display_timeframe = "1 month"
 
-            p_image = static_util.generate_kline_image(df_slice_dict)
-            t_image = static_util.generate_trend_image(df_slice_dict)
+            p_image = static_util.generate_kline_image(df_slice_dict, symbol=artifact_symbol)
+            t_image = static_util.generate_trend_image(df_slice_dict, symbol=artifact_symbol)
+
+            self.latest_analysis_artifacts = {
+                "pattern": p_image.get("pattern_image_filename"),
+                "trend": t_image.get("trend_image_filename"),
+            }
 
             # Create initial state
             initial_state = {
                 "kline_data": df_slice_dict,
+                "artifact_symbol": artifact_symbol,
                 "analysis_results": None,
                 "messages": [],
                 "time_frame": display_timeframe,
                 "stock_name": asset_name,
                 "pattern_image": p_image["pattern_image"],
+                "pattern_image_filename": p_image.get("pattern_image_filename", ""),
                 "trend_image": t_image["trend_image"],
+                "trend_image_filename": t_image.get("trend_image_filename", ""),
             }
 
             # Run the trading graph
@@ -806,7 +824,7 @@ def analyze():
         display_name = analyzer.asset_mapping.get(asset, asset)
         if display_name is None:
             display_name = asset
-        results = analyzer.run_analysis(df, display_name, timeframe)
+        results = analyzer.run_analysis(df, display_name, timeframe, artifact_symbol=asset)
         formatted_results = analyzer.extract_analysis_results(results)
 
         # If redirect is requested, return redirect URL with results
@@ -907,7 +925,7 @@ def analyze_mt5():
             return jsonify({"error": _build_mt5_fetch_error(client, symbol, timeframe)})
 
         # Run the same analysis pipeline as /api/analyze
-        results = analyzer.run_analysis(df, symbol, timeframe)
+        results = analyzer.run_analysis(df, symbol, timeframe, artifact_symbol=symbol)
         formatted_results = analyzer.extract_analysis_results(results)
 
         # Handle redirect (same pattern as /api/analyze)
@@ -1005,7 +1023,7 @@ def analyze_bitkub():
             return jsonify({"error": f"No data returned from Bitkub for {symbol} ({timeframe})."})
 
         # Run the same analysis pipeline
-        results = analyzer.run_analysis(df, symbol, timeframe)
+        results = analyzer.run_analysis(df, symbol, timeframe, artifact_symbol=symbol)
         formatted_results = analyzer.extract_analysis_results(results)
 
         # Handle redirect (same pattern as /api/analyze)
@@ -1119,7 +1137,7 @@ def analyze_binance():
             return jsonify({"error": f"No data returned from Binance for {symbol} ({timeframe})."})
 
         # Run the same analysis pipeline
-        results = analyzer.run_analysis(df, symbol, timeframe)
+        results = analyzer.run_analysis(df, symbol, timeframe, artifact_symbol=symbol)
         formatted_results = analyzer.extract_analysis_results(results)
 
         # Handle redirect (same pattern as /api/analyze)
@@ -1414,18 +1432,14 @@ def get_api_key_status():
 def get_image(image_type):
     """API endpoint to serve generated images."""
     try:
-        if image_type == "pattern":
-            image_path = "kline_chart.png"
-        elif image_type == "trend":
-            image_path = "trend_graph.png"
-        elif image_type == "pattern_chart":
-            image_path = "pattern_chart.png"
-        elif image_type == "trend_chart":
-            image_path = "trend_chart.png"
+        if image_type in {"pattern", "pattern_chart"}:
+            image_path = analyzer.latest_analysis_artifacts.get("pattern")
+        elif image_type in {"trend", "trend_chart"}:
+            image_path = analyzer.latest_analysis_artifacts.get("trend")
         else:
             return jsonify({"error": "Invalid image type"})
 
-        if not os.path.exists(image_path):
+        if not image_path or not os.path.exists(image_path):
             return jsonify({"error": "Image not found"})
 
         return send_file(image_path, mimetype="image/png")

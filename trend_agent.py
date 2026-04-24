@@ -42,9 +42,11 @@ def create_trend_agent(tool_llm, graph_llm, toolkit):
         # --- Tool definitions ---
         tools = [toolkit.generate_trend_image]
         time_frame = state["time_frame"]
+        artifact_symbol = state.get("artifact_symbol", state.get("stock_name"))
 
         # --- Check for precomputed image in state ---
         trend_image_b64 = state.get("trend_image")
+        trend_image_filename = state.get("trend_image_filename", "")
 
         messages = []
 
@@ -85,9 +87,11 @@ def create_trend_agent(tool_llm, graph_llm, toolkit):
                     import copy
 
                     tool_args["kline_data"] = copy.deepcopy(state["kline_data"])
+                    tool_args["symbol"] = artifact_symbol
                     tool_fn = next(t for t in tools if t.name == tool_name)
                     tool_result = tool_fn.invoke(tool_args)
                     trend_image_b64 = tool_result.get("trend_image")
+                    trend_image_filename = tool_result.get("trend_image_filename", "")
                     messages.append(
                         ToolMessage(
                             tool_call_id=call["id"], content=json.dumps(tool_result)
@@ -158,7 +162,7 @@ def create_trend_agent(tool_llm, graph_llm, toolkit):
             "messages": messages + [final_response],
             "trend_report": final_response.content,
             "trend_image": trend_image_b64,
-            "trend_image_filename": "trend_graph.png",
+            "trend_image_filename": trend_image_filename,
             "trend_image_description": (
                 "Trend-enhanced candlestick chart with support/resistance lines"
                 if trend_image_b64

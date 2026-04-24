@@ -102,8 +102,8 @@ def print_results(results: dict) -> None:
 
     # Image file info
     print(f"\n{YELLOW}📁 Chart images saved:{RESET}")
-    print("  • kline_chart.png")
-    print("  • trend_graph.png")
+    print(f"  • {results.get('pattern_image_filename', 'data/<symbol>/kline_chart.png')}")
+    print(f"  • {results.get('trend_image_filename', 'data/<symbol>/trend_graph.png')}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -207,7 +207,7 @@ def main() -> None:
     analyzer = WebTradingAnalyzer()
     print(f"\n{YELLOW}Running analysis …{RESET}")
 
-    results = analyzer.run_analysis(df, symbol, timeframe)
+    results = analyzer.run_analysis(df, symbol, timeframe, artifact_symbol=symbol)
     formatted = analyzer.extract_analysis_results(results)
 
     # ── 4. Display results ────────────────────────────────────────────
