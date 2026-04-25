@@ -1,0 +1,74 @@
+{
+  "dry_run": true,
+  "history_file": "data/auto_trade_history.csv",
+  "state_file": "data/auto_trade_state.json",
+  "status_file": "data/auto_trade_status.json",
+  "llm": {
+    "provider": "openai",
+    "agent_model": "gpt-4o-mini",
+    "graph_model": "gpt-4o-mini",
+    "temperature": 0.1
+  },
+  "risk": {
+    "default_bars": 120,
+    "min_confidence_score": 50,
+    "min_risk_reward_ratio": 1.2,
+    "allow_reentry_same_direction": false,
+    "close_on_opposite_signal": true,
+    "close_on_no_signal": false,
+    "use_auto_sl_tp": true,
+    "atr_period": 14,
+    "sl_atr_multiplier": 1.5,
+    "tp_atr_multiplier": 2.0,
+    "default_risk_reward_ratio": 1.5,
+    "min_stop_distance_pct": 0.001
+  },
+  "symbols": [
+    {
+      "enabled": true,
+      "provider": "mt5",
+      "symbol": "EURUSD",
+      "timeframe": "1h",
+      "market_type": "spot",
+      "lot": 0.1,
+      "min_confidence_score": 50,
+      "min_risk_reward_ratio": 1.2
+    }
+  ],
+  "adaptive_tl": {
+    "enabled": false,
+    "poll_interval_seconds": 5,
+    "state_dir": "runtime/adaptive_tl",
+    "below_born_be_keep_distance_enabled": true,
+    "profit_stages": {
+      "born_be": {
+        "trigger_usd": 5,
+        "lock_usd": 1,
+        "description": "First profit milestone: Lock 1 USD when profit reaches 5 USD"
+      },
+      "pre_be": {
+        "trigger_usd": 20,
+        "lock_usd": 5,
+        "description": "Building profit: Lock 5 USD when profit reaches 20 USD"
+      },
+      "be": {
+        "trigger_usd": 50,
+        "lock_usd": 30,
+        "description": "Break-even zone: Lock 30 USD when profit reaches 50 USD"
+      },
+      "tl": {
+        "trigger_usd": 70,
+        "lock_usd": 50,
+        "description": "Trailing zone: Lock 50 USD when profit reaches 70 USD"
+      },
+      "tp_trail": {
+        "trigger_usd": 80,
+        "lock_usd": 60,
+        "remove_fixed_tp": true,
+        "enable_high_track": true,
+        "description": "TP Trailing + High-Track: Lock 60 USD, enable 30% retrace close"
+      }
+    },
+    "high_track_retrace_pct": 30
+  }
+}

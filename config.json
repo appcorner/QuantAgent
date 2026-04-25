@@ -43,7 +43,7 @@
       "quote_amount": 50
     },
     {
-      "enabled": true,
+      "enabled": false,
       "provider": "mt5",
       "market_type": "forex",
       "symbol": "XAUUSD",
@@ -56,9 +56,23 @@
       "provider": "mt5",
       "market_type": "forex",
       "symbol": "BTCUSD",
-      "timeframe": "30m",
+      "timeframe": "15m",
       "bars": 150,
       "lot": 0.10
     }
-  ]
+  ],
+  "adaptive_tl": {
+    "enabled": true,
+    "poll_interval_seconds": 5,
+    "state_dir": "runtime/adaptive_tl",
+    "below_born_be_keep_distance_enabled": true,
+    "profit_stages": {
+      "born_be": {"trigger_usd": 5, "lock_usd": 1},
+      "pre_be": {"trigger_usd": 20, "lock_usd": 5},
+      "be": {"trigger_usd": 50, "lock_usd": 30},
+      "tl": {"trigger_usd": 70, "lock_usd": 50},
+      "tp_trail": {"trigger_usd": 80, "lock_usd": 60}
+    },
+    "high_track_retrace_pct": 30
+  }
 }
