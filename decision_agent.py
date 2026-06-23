@@ -1,6 +1,7 @@
 """
 Agent for making final trade decisions in high-frequency trading (HFT) context.
 Combines indicator, pattern, and trend reports to issue a LONG or SHORT order.
+Now enhanced with historical performance learning.
 """
 
 import os
@@ -8,6 +9,12 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+try:
+    from performance_tracker import PerformanceTracker
+    LEARNING_ENABLED = True
+except ImportError:
+    LEARNING_ENABLED = False
 
 
 SOURCE_BASE_DIR = Path(__file__).resolve().parent
@@ -83,6 +90,46 @@ def _read_decision_prompt_template() -> str:
     )
 
 
+def _get_learning_context(symbol: str, timeframe: str, min_trades: int = 10) -> str:
+    """
+    Get historical performance learning context for the decision prompt.
+
+    Returns empty string if learning is disabled or insufficient data.
+    """
+    if not LEARNING_ENABLED:
+        return ""
+
+    try:
+        tracker = PerformanceTracker()
+
+        # Check if we have enough trades
+        recent_trades = tracker.get_recent_trades(symbol=symbol, timeframe=timeframe, limit=100)
+        if len(recent_trades) < min_trades:
+            return ""
+
+        # Generate learning report
+        learning_report = tracker.generate_learning_report(
+            symbol=symbol,
+            timeframe=timeframe,
+            limit=50
+        )
+
+        # Wrap in clear section
+        return f"""
+
+---
+## 📚 Historical Performance Context (Learning System)
+
+{learning_report}
+
+**IMPORTANT**: Use these insights to improve your decision quality. Avoid patterns/conditions that historically underperform.
+---
+"""
+    except Exception as e:
+        print(f"Warning: Could not load learning context: {e}")
+        return ""
+
+
 def _ensure_required_report_placeholders(template: str) -> str:
     required_sections = [
         ("indicator_report", "**Technical Indicator Report**\n{indicator_report}"),
@@ -125,9 +172,29 @@ def create_final_trade_decider(llm):
         stock_name = state["stock_name"]
         market = state.get("market", "")
 
+        # --- Load historical learning context ---
+        use_learning = os.environ.get("USE_LEARNING", "true").lower() in ("true", "1", "yes")
+        learning_context = ""
+
+        if use_learning and LEARNING_ENABLED:
+            learning_context = _get_learning_context(
+                symbol=stock_name,
+                timeframe=time_frame,
+                min_trades=int(os.environ.get("MIN_LEARNING_TRADES", "10"))
+            )
+            if learning_context:
+                print(f"✓ Learning context loaded for {stock_name} {time_frame}")
+            else:
+                print(f"○ Insufficient data for learning context ({stock_name} {time_frame})")
+
         # --- System prompt for LLM ---
         prompt_template = _read_decision_prompt_template()
         prompt_template = _ensure_required_report_placeholders(prompt_template)
+
+        # Inject learning context before reports
+        if learning_context:
+            prompt_template = prompt_template + learning_context
+
         prompt = _render_prompt_template(
             prompt_template,
             {

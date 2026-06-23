@@ -87,17 +87,30 @@ int DetermineStage(const double current_profit_usd)
    return STAGE_BELOW_BORN_BE;
 }
 
+double GetTriggerForStage(const int stage)
+{
+    switch(stage)
+    {
+       case STAGE_BORN_BE:   return InpBornBETriggerUSD;
+       case STAGE_PRE_BE:    return InpPreBETriggerUSD;
+       case STAGE_BE:        return InpBETriggerUSD;
+       case STAGE_TL:        return InpTLTriggerUSD;
+       case STAGE_TP_TRAIL:  return InpTPTrailTriggerUSD;
+       default:              return 0.0;
+    }
+}
+
 double GetLockTargetForStage(const int stage)
 {
-   switch(stage)
-   {
-      case STAGE_BORN_BE:   return InpBornBELockUSD;
-      case STAGE_PRE_BE:    return InpPreBELockUSD;
-      case STAGE_BE:        return InpBELockUSD;
-      case STAGE_TL:        return InpTLLockUSD;
-      case STAGE_TP_TRAIL:  return InpTPTrailLockUSD;
-      default:              return 0.0;
-   }
+    switch(stage)
+    {
+       case STAGE_BORN_BE:   return InpBornBELockUSD;
+       case STAGE_PRE_BE:    return InpPreBELockUSD;
+       case STAGE_BE:        return InpBELockUSD;
+       case STAGE_TL:        return InpTLLockUSD;
+       case STAGE_TP_TRAIL:  return InpTPTrailLockUSD;
+       default:              return 0.0;
+    }
 }
 
 int FindStateIndexByTicket(const ulong ticket)
@@ -367,26 +380,40 @@ void ProcessTicket(const ulong ticket)
 
    double working_sl = current_sl;
 
-   if(g_states[idx].locked_profit_usd > 0.0)
-   {
-      const double new_sl = ConvertLockedProfitToSL(side,
-                                                    entry_price,
-                                                    current_price,
-                                                    g_states[idx].locked_profit_usd,
-                                                    current_profit_usd);
+    if(g_states[idx].locked_profit_usd > 0.0)
+    {
+       double effective_locked_profit = g_states[idx].locked_profit_usd;
+       
+       // If we've unlocked this stage and current profit exceeds the stage trigger, trail the SL
+       // by adding the excess profit to the locked profit (maintaining fixed distance)
+       if(g_states[idx].stage_unlocked)
+       {
+          double stage_trigger = GetTriggerForStage(g_states[idx].current_stage);
+          if(g_states[idx].current_profit_usd > stage_trigger)
+          {
+             double excess_profit = g_states[idx].current_profit_usd - stage_trigger;
+             effective_locked_profit = g_states[idx].locked_profit_usd + excess_profit;
+          }
+       }
+       
+       const double new_sl = ConvertLockedProfitToSL(side,
+                                                     entry_price,
+                                                     current_price,
+                                                     effective_locked_profit,
+                                                     current_profit_usd);
 
-      if(IsSLImproved(side, new_sl, working_sl))
-      {
-         if(ModifyPositionSLTP(ticket, new_sl, current_tp))
-         {
-            PrintFormat("[ATL] sl_modified ticket=%I64u reason=stage_lock old_sl=%.5f new_sl=%.5f",
-                        ticket,
-                        working_sl,
-                        new_sl);
-            working_sl = new_sl;
-         }
-      }
-   }
+       if(IsSLImproved(side, new_sl, working_sl))
+       {
+          if(ModifyPositionSLTP(ticket, new_sl, current_tp))
+          {
+             PrintFormat("[ATL] sl_modified ticket=%I64u reason=stage_lock old_sl=%.5f new_sl=%.5f",
+                         ticket,
+                         working_sl,
+                         new_sl);
+             working_sl = new_sl;
+          }
+       }
+    }
 
    g_states[idx].dynamic_lock_follow = false;
 

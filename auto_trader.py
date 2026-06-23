@@ -35,6 +35,24 @@ try:
     import requests
 except ModuleNotFoundError:
     requests = None
+    
+try:
+    from performance_tracker import PerformanceTracker
+    PERFORMANCE_TRACKING_ENABLED = True
+except ImportError:
+    PERFORMANCE_TRACKING_ENABLED = False
+
+try:
+    from adaptive_confidence import AdaptiveConfidence
+    ADAPTIVE_CONFIDENCE_ENABLED = True
+except ImportError:
+    ADAPTIVE_CONFIDENCE_ENABLED = False
+
+try:
+    from entry_optimizer import EntryOptimizer
+    ENTRY_OPTIMIZER_ENABLED = True
+except ImportError:
+    ENTRY_OPTIMIZER_ENABLED = False
 
 try:
     load_dotenv = importlib.import_module("dotenv").load_dotenv
@@ -774,8 +792,12 @@ class MT5ExchangeAdapter(BaseExchangeAdapter):
 
     def get_positions(self, item: dict[str, Any]) -> list[dict[str, Any]]:
         symbol = str(item["symbol"])
+        params = {"symbols": symbol}
+        magic = int(item.get("magic", 0))
+        if magic:
+            params["magic"] = magic
         try:
-            resp = requests.get(f"{self.base_url}/positions", params={"symbols": symbol}, timeout=self.timeout)
+            resp = requests.get(f"{self.base_url}/positions", params=params, timeout=self.timeout)
             resp.raise_for_status()
             positions = resp.json()
             normalized = []
@@ -932,6 +954,9 @@ class AutoTradingEngine:
         data.setdefault("status_file", "data/auto_trade_status.json")
         data.setdefault("risk", {})
         data.setdefault("symbols", [])
+        data.setdefault("mt5", {})
+        data["mt5"].setdefault("magic", 123456)
+        data["mt5"].setdefault("comment", "QuantAgent auto trader")
         data["risk"].setdefault("default_bars", 120)
         data["risk"].setdefault("min_confidence_score", 50)
         data["risk"].setdefault("min_risk_reward_ratio", 1.2)
@@ -1040,6 +1065,11 @@ class AutoTradingEngine:
         bars = int(item.get("bars", self.config["risk"].get("default_bars", 120)))
         dry_run = normalize_bool(item.get("dry_run", self.config.get("dry_run", True)), True)
 
+        if provider == "mt5":
+            mt5_cfg = self.config.get("mt5", {})
+            for k, v in mt5_cfg.items():
+                item.setdefault(k, v)
+
         balance: Any = {}
         existing_positions: list[dict[str, Any]] = []
 
@@ -1101,8 +1131,10 @@ class AutoTradingEngine:
                 self.store.append_history(event)
                 return {**event, "balance": balance, "positions": existing_positions, "analysis": formatted}
 
-            min_conf = safe_float(item.get("min_confidence_score", self.config["risk"].get("min_confidence_score", 50)))
+            # Get adaptive confidence threshold if enabled
+            min_conf = self._get_confidence_threshold(item, symbol, timeframe)
             min_rr = safe_float(item.get("min_risk_reward_ratio", self.config["risk"].get("min_risk_reward_ratio", 1.2)))
+
             if confidence_score and confidence_score < min_conf:
                 event.update({"status": "skipped", "action": "skip", "notes": f"Confidence {confidence_score} is below threshold {min_conf}."})
                 self.store.append_history(event)
@@ -1161,10 +1193,25 @@ class AutoTradingEngine:
             if tp > 0:
                 order_item["tp"] = tp
 
+            # Check should_enter_now from decision
             if not should_enter:
                 event.update({"status": "skipped", "action": "skip", "notes": "Decision advised not to enter now."})
                 self.store.append_history(event)
                 return {**event, "balance": balance, "positions": existing_positions, "analysis": formatted}
+
+            # Entry timing optimization (if enabled)
+            if self.config.get("risk", {}).get("use_entry_optimizer", False) and ENTRY_OPTIMIZER_ENABLED:
+                timing_result = self._evaluate_entry_timing(decision, df, formatted)
+                if not timing_result["should_enter_now"]:
+                    event.update({
+                        "status": "skipped",
+                        "action": "skip",
+                        "notes": f"Entry timing not optimal: {timing_result['reason']}"
+                    })
+                    self.store.append_history(event)
+                    return {**event, "balance": balance, "positions": existing_positions, "analysis": formatted}
+                else:
+                    print(f"✓ Entry timing check passed: {timing_result['reason']}")
 
             if dry_run:
                 order_result = {"status": "dry_run", "quantity": self._preview_quantity(order_item, last_price), "side": "BUY" if decision == "LONG" else "SELL", "reason": "Dry run mode enabled."}
@@ -1200,6 +1247,12 @@ class AutoTradingEngine:
                     "ticket": order_refs.get("ticket", ""),
                     "client_order_id": order_refs.get("client_order_id", ""),
                     "opened_at": now_iso(),
+                    "confidence_score": confidence_score,
+                    "risk_reward_ratio": risk_reward_ratio,
+                    "indicator_report": formatted.get("indicator_report", ""),
+                    "pattern_report": formatted.get("pattern_report", ""),
+                    "trend_report": formatted.get("trend_report", ""),
+                    "entry_timing_reason": str(decision_blob.get("entry_timing_reason", "")),
                 }
 
             self.store.append_history(event)
@@ -1275,6 +1328,160 @@ class AutoTradingEngine:
                 "notes": close_details.get("reason", reason),
             }
         )
+
+        # Record to performance tracker if enabled
+        if PERFORMANCE_TRACKING_ENABLED and outcome in {"WIN", "LOSS", "BREAKEVEN"}:
+            self._record_to_performance_tracker(trade, close_price, pnl, outcome)
+
+    def _record_to_performance_tracker(
+        self,
+        trade: dict[str, Any],
+        close_price: float,
+        pnl: float,
+        outcome: str
+    ) -> None:
+        """
+        Record completed trade to performance tracker with full context.
+        """
+        try:
+            tracker = PerformanceTracker()
+
+            # Calculate actual R:R
+            entry = safe_float(trade.get("entry_price"), 0.0)
+            sl = safe_float(trade.get("sl"), 0.0)
+            tp = safe_float(trade.get("tp"), 0.0)
+            actual_rr = 0.0
+
+            if entry > 0 and sl > 0:
+                risk = abs(entry - sl)
+                reward = abs(close_price - entry)
+                if risk > 0:
+                    actual_rr = reward / risk
+
+            # Extract market conditions from trade data
+            market_conditions = {}
+            if trade.get("atr"):
+                market_conditions["atr"] = safe_float(trade.get("atr"), 0.0)
+
+            # TODO: Parse RSI, MACD from indicator_report if available
+            # For now, we'll add these in future enhancement
+
+            # Build comprehensive trade record
+            trade_record = {
+                "timestamp": trade.get("opened_at", ""),
+                "symbol": trade.get("symbol", ""),
+                "timeframe": trade.get("timeframe", ""),
+                "provider": trade.get("provider", ""),
+                "market_type": trade.get("market_type", ""),
+                "decision": trade.get("decision", ""),
+                "entry_price": entry,
+                "exit_price": close_price,
+                "quantity": safe_float(trade.get("quantity"), 0.0),
+                "sl": sl,
+                "tp": tp,
+                "outcome": outcome,
+                "pnl": pnl,
+                "confidence_score": safe_float(trade.get("confidence_score"), 0.0),
+                "risk_reward_ratio": safe_float(trade.get("risk_reward_ratio"), 0.0),
+                "actual_rr": actual_rr,
+                "market_conditions": market_conditions,
+                "indicator_report": trade.get("indicator_report", ""),
+                "pattern_report": trade.get("pattern_report", ""),
+                "trend_report": trade.get("trend_report", ""),
+                "entry_reason": trade.get("entry_timing_reason", "Auto trader execution"),
+                "exit_reason": "Position closed",
+            }
+
+            tracker.record_trade(trade_record)
+            print(f"✓ Trade recorded to performance tracker: {outcome} ${pnl:.2f}")
+
+        except Exception as e:
+            print(f"Warning: Could not record trade to performance tracker: {e}")
+
+    def _get_confidence_threshold(
+        self,
+        item: dict[str, Any],
+        symbol: str,
+        timeframe: str
+    ) -> float:
+        """
+        Get confidence threshold - adaptive if enabled, otherwise static from config.
+        """
+        # Check if adaptive confidence is enabled
+        use_adaptive = self.config.get("risk", {}).get("use_adaptive_confidence", False)
+
+        # Static threshold from item or config
+        static_threshold = safe_float(
+            item.get("min_confidence_score",
+                    self.config["risk"].get("min_confidence_score", 65))
+        )
+
+        # Return static if adaptive is disabled or unavailable
+        if not use_adaptive or not ADAPTIVE_CONFIDENCE_ENABLED:
+            return static_threshold
+
+        try:
+            # Get adaptive threshold
+            adapter = AdaptiveConfidence(
+                default_threshold=static_threshold,
+                window_size=self.config.get("risk", {}).get("adaptive_window", 50),
+                min_trades_required=self.config.get("risk", {}).get("min_trades_for_adaptation", 10)
+            )
+
+            adaptive_threshold = adapter.get_threshold_for_config(
+                config=self.config,
+                symbol=symbol,
+                timeframe=timeframe
+            )
+
+            return adaptive_threshold
+
+        except Exception as e:
+            print(f"Warning: Could not calculate adaptive threshold: {e}")
+            return static_threshold
+
+    def _evaluate_entry_timing(
+        self,
+        decision: str,
+        df: Any,
+        formatted_analysis: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Evaluate entry timing quality to avoid chasing, S/R proximity issues, etc.
+        """
+        if not ENTRY_OPTIMIZER_ENABLED:
+            return {"should_enter_now": True, "reason": "Entry optimizer not available"}
+
+        try:
+            # Convert DataFrame to dict format
+            kline_data = {
+                "Close": df["Close"].tolist(),
+                "High": df["High"].tolist(),
+                "Low": df["Low"].tolist(),
+                "Volume": df["Volume"].tolist() if "Volume" in df else []
+            }
+
+            # Get optimizer config
+            config = self.config.get("risk", {}).get("entry_optimizer", {})
+            optimizer = EntryOptimizer(
+                max_extension_pct=config.get("max_extension_pct", 3.0),
+                proximity_threshold_pct=config.get("proximity_threshold_pct", 0.5),
+                min_volume_ratio=config.get("min_volume_ratio", 0.8)
+            )
+
+            # Evaluate timing
+            result = optimizer.evaluate_entry_timing(
+                decision=decision,
+                kline_data=kline_data,
+                indicator_report=formatted_analysis.get("indicator_report", ""),
+                pattern_report=formatted_analysis.get("pattern_report", "")
+            )
+
+            return result
+
+        except Exception as e:
+            print(f"Warning: Could not evaluate entry timing: {e}")
+            return {"should_enter_now": True, "reason": f"Entry timing check error: {e}"}
 
     def _sync_open_trades_with_live_positions(
         self,

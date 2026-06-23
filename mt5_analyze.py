@@ -224,3 +224,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+#build command for PyInstaller:
+#uv run pyinstaller --onefile --clean --hidden-import dotenv --hidden-import mt5_data --collect-all talib --name "mt5-analyze" mt5_analyze.py
