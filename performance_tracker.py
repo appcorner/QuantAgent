@@ -49,7 +49,7 @@ class PerformanceTracker:
                 "last_updated": datetime.now(timezone.utc).isoformat()
             }
         }
-        self.db_file.write_text(json.dumps(initial_data, indent=2), encoding="utf-8")
+        self.db_file.write_text(json.dumps(initial_data, indent=2, ensure_ascii=False), encoding="utf-8")
 
     def _load_database(self) -> list[dict]:
         """Load trades from database."""
@@ -71,7 +71,7 @@ class PerformanceTracker:
                 "last_updated": datetime.now(timezone.utc).isoformat()
             }
         }
-        self.db_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        self.db_file.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
     def record_trade(self, trade_data: dict):
         """
@@ -527,7 +527,7 @@ class PerformanceTracker:
             tf_trades = [t for t in self.trades if t.get("timeframe") == tf]
             metrics["by_timeframe"][tf] = self.calculate_win_rate(tf_trades)
 
-        self.metrics_file.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+        self.metrics_file.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
 
         return metrics
 
